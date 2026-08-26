@@ -72,6 +72,18 @@ final class FlushEngine: ObservableObject {
     }
 
     func resetStats() {
+        // A flush settles asynchronously.  Invalidate it before clearing the
+        // counters so it cannot write one last flush back after the reset.
+        flushTask?.cancel()
+        flushTask = nil
+        flushStart = nil
+        isGolden = false
+
+        celebrationTask?.cancel()
+        celebrationTask = nil
+        celebrationStart = nil
+        FlushAudio.shared.stop()
+
         totalFlushes = 0
         goldenFlushes = 0
         defaults.set(0, forKey: Key.total)

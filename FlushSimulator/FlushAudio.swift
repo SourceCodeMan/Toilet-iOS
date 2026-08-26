@@ -21,6 +21,8 @@ final class FlushAudio {
     private var ordinary: [AVAudioPCMBuffer] = []
     private var golden: AVAudioPCMBuffer?
     private var isPrepared = false
+    private var isPreparing = false
+    private var isConfigured = false
 
     private static let muteKey = "flushMuted"
 
@@ -35,39 +37,55 @@ final class FlushAudio {
     /// Renders the sound and wires up the engine. Safe to call more than once.
     func prepare() {
         queue.async { [self] in
-            guard !isPrepared else { return }
-            isPrepared = true
+            guard !isPrepared, !isPreparing else { return }
+            isPreparing = true
+            defer { isPreparing = false }
 
             guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else { return }
-            engine.attach(player)
-            engine.connect(player, to: engine.mainMixerNode, format: format)
+            if !isConfigured {
+                engine.attach(player)
+                engine.connect(player, to: engine.mainMixerNode, format: format)
+                isConfigured = true
+            }
 
             // Three takes so the same noise doesn't repeat back to back.
             let seeds: [UInt64] = [11, 4_242, 90_210]
             ordinary = seeds.compactMap { render(format: format, seed: $0, golden: false) }
             golden = render(format: format, seed: 777, golden: true)
+            isPrepared = !ordinary.isEmpty && golden != nil
         }
     }
 
     func play(golden playGolden: Bool) {
         guard !isMuted else { return }
+        // Keep preparation and this request ordered on the serial queue. This
+        // makes a pull immediately after launch play as soon as rendering ends.
+        prepare()
         queue.async { [self] in
             guard isPrepared else { return }
-            guard let buffer = playGolden ? golden : ordinary.randomElement() else { return }
-
-            // .playback so the flush is audible even with the ringer silenced; .mixWithOthers
-            // so it still leaves whatever music you had going alone.
-            try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
-            try? AVAudioSession.sharedInstance().setActive(true)
-
-            if !engine.isRunning {
-                do { try engine.start() } catch { return }
-            }
-
-            player.stop()
-            player.scheduleBuffer(buffer, at: nil, options: [.interrupts], completionHandler: nil)
-            player.play()
+            playPrepared(golden: playGolden)
         }
+    }
+
+    func stop() {
+        queue.async { [self] in player.stop() }
+    }
+
+    private func playPrepared(golden playGolden: Bool) {
+        guard let buffer = playGolden ? golden : ordinary.randomElement() else { return }
+
+        // .playback so the flush is audible even with the ringer silenced; .mixWithOthers
+        // so it still leaves whatever music you had going alone.
+        try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
+        try? AVAudioSession.sharedInstance().setActive(true)
+
+        if !engine.isRunning {
+            do { try engine.start() } catch { return }
+        }
+
+        player.stop()
+        player.scheduleBuffer(buffer, at: nil, options: [.interrupts], completionHandler: nil)
+        player.play()
     }
 
     // MARK: - Synthesis
