@@ -24,6 +24,20 @@ final class Haptics {
         }
     }
 
+    /// The lever catching, the instant you press it.
+    func tick() {
+        guard isSupported else {
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred(intensity: 0.6)
+            return
+        }
+        play(events: [
+            CHHapticEvent(eventType: .hapticTransient, parameters: [
+                CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.42),
+                CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.95)
+            ], relativeTime: 0)
+        ], curves: [])
+    }
+
     /// A short knock, for when you mash the handle mid-flush.
     func thud() {
         guard isSupported else { return }

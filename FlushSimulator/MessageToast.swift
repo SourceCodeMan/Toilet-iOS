@@ -30,6 +30,7 @@ struct MessageToast: View {
     private var symbol: String? {
         switch message.kind {
         case .golden:    return "sparkles"
+        case .unlock:    return "lock.open.fill"
         case .milestone: return "flag.checkered"
         case .busy:      return "hourglass"
         case .quip:      return nil
@@ -39,6 +40,7 @@ struct MessageToast: View {
     private var background: Color {
         switch message.kind {
         case .golden:    return Color(red: 0.99, green: 0.80, blue: 0.22)
+        case .unlock:    return Color(red: 0.22, green: 0.62, blue: 0.38)
         case .milestone: return palette.accent
         case .busy:      return palette.porcelainShadow.opacity(0.85)
         case .quip:      return palette.ink.opacity(0.88)

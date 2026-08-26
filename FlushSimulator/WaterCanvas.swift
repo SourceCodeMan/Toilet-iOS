@@ -17,6 +17,12 @@ struct WaterCanvas: View {
     var flushClock: Double?
     var palette: Palette
 
+    /// How filthy the bowl is, 0...1. Stains the porcelain and murks the water.
+    var grime: Double = 0
+
+    /// The colour everything creeps toward as the bowl is neglected.
+    private static let filth = Color(red: 0.36, green: 0.27, blue: 0.10)
+
     static let size = CGSize(width: 178, height: 68)
 
     var body: some View {
@@ -38,6 +44,7 @@ struct WaterCanvas: View {
 
             drawDryBowl(in: &context, rim: rim)
             let pool = surfaceRect(in: rim, clock: clock)
+            if grime > 0.01 { drawStains(in: &context, rim: rim, pool: pool) }
             drawWater(in: &context, pool: pool)
 
             if turbulence > 0.01 {
@@ -82,6 +89,52 @@ struct WaterCanvas: View {
                 endPoint: CGPoint(x: pool.midX, y: pool.maxY)
             )
         )
+
+        // Clouds the water rather than replacing it, so a fixture's own colour still
+        // shows through a dirty bowl.
+        if grime > 0.01 {
+            context.fill(Path(ellipseIn: pool),
+                         with: .color(Self.filth.opacity(0.60 * grime)))
+        }
+    }
+
+    /// The ring at the waterline, and the streaks running down to it.
+    ///
+    /// Drawn on the dry porcelain underneath the pool, so the water covers its lower
+    /// half and the ring reads as sitting exactly at the surface — which is where a
+    /// real one forms.
+    private func drawStains(in context: inout GraphicsContext, rim: CGRect, pool: CGRect) {
+        let strength = min(grime, 1)
+
+        // A broad haze across the whole basin.
+        context.fill(Path(ellipseIn: rim.insetBy(dx: rim.width * 0.06, dy: rim.height * 0.06)),
+                     with: .radialGradient(
+                        Gradient(colors: [Self.filth.opacity(0.42 * strength), .clear]),
+                        center: CGPoint(x: rim.midX, y: rim.midY + rim.height * 0.12),
+                        startRadius: rim.width * 0.10,
+                        endRadius: rim.width * 0.52))
+
+        // The ring itself, thickening as things get worse.
+        let ring = pool.insetBy(dx: -pool.width * 0.045, dy: -pool.height * 0.075)
+        context.stroke(Path(ellipseIn: ring),
+                       with: .color(Self.filth.opacity(0.55 * strength)),
+                       style: StrokeStyle(lineWidth: 1.5 + 3.0 * strength))
+
+        // Streaks down the back wall. They only show once it is genuinely neglected.
+        guard strength > 0.35 else { return }
+        let show = (strength - 0.35) / 0.65
+        var streaks = Path()
+        for i in 0..<5 {
+            let t = (Double(i) + 0.5) / 5.0
+            let x = rim.minX + rim.width * (0.18 + 0.64 * t)
+            let top = rim.minY + rim.height * (0.16 + 0.08 * sin(Double(i) * 2.1))
+            streaks.move(to: CGPoint(x: x, y: top))
+            streaks.addQuadCurve(to: CGPoint(x: x + 2.5, y: ring.minY + 2),
+                                 control: CGPoint(x: x - 3, y: (top + ring.minY) / 2))
+        }
+        context.stroke(streaks,
+                       with: .color(Self.filth.opacity(0.42 * show)),
+                       style: StrokeStyle(lineWidth: 2.2, lineCap: .round))
     }
 
     private func drawVortex(in context: inout GraphicsContext, pool: CGRect) {

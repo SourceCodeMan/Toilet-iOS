@@ -7,13 +7,21 @@ struct ToiletView: View {
     /// When the current flush started, or nil if the bowl is at rest.
     var flushStart: Date?
     var palette: Palette
-    var onPull: () -> Void
+    var profile: FlushProfile
+
+    /// How filthy the bowl is, 0...1.
+    var grime: Double
+
+    var onPull: (FlushGrade) -> Void
 
     static let designSize = CGSize(width: 320, height: 470)
 
     /// How far the finger has pushed the handle, before the flush takes over.
     @State private var drag: Double = 0
-    @State private var alreadyFlushed = false
+
+    /// When the finger went down, or nil if it is not down. The hold is measured
+    /// from here, and the meter reads from the same clock.
+    @State private var holdStart: Date?
 
     var body: some View {
         Group {
@@ -28,13 +36,22 @@ struct ToiletView: View {
             }
         }
         .frame(width: Self.designSize.width, height: Self.designSize.height)
+        .overlay {
+            if let holdStart {
+                HoldMeter(holdStart: holdStart, palette: palette)
+                    // On the tank face above the lever, in the gap between the lid
+                    // and the handle.
+                    .position(x: 116, y: 51)
+                    .transition(.opacity)
+            }
+        }
     }
 
     private func scene(elapsed: Double?) -> some View {
-        let level = elapsed.map(FlushTimeline.level(at:)) ?? FlushTimeline.restingLevel
-        let spin = elapsed.map(FlushTimeline.spin(at:)) ?? 0
+        let level = elapsed.map { FlushTimeline.level(at: $0, profile) } ?? profile.restingLevel
+        let spin = elapsed.map { FlushTimeline.spin(at: $0, profile) } ?? 0
         let churn = elapsed.map(FlushTimeline.turbulence(at:)) ?? 0
-        let shake = elapsed.map(FlushTimeline.rumble(at:)) ?? 0
+        let shake = elapsed.map { FlushTimeline.rumble(at: $0, profile) } ?? 0
         // Once the flush owns the handle, the finger stops mattering.
         let push = elapsed.map(FlushTimeline.handlePush(at:)) ?? drag
 
@@ -44,7 +61,8 @@ struct ToiletView: View {
             bowl
             seat
 
-            WaterCanvas(level: level, spin: spin, turbulence: churn, flushClock: elapsed, palette: palette)
+            WaterCanvas(level: level, spin: spin, turbulence: churn, flushClock: elapsed,
+                        palette: palette, grime: grime)
                 .position(x: 160, y: 218)
 
             handle(push: push, animated: elapsed == nil)
@@ -173,23 +191,25 @@ struct ToiletView: View {
             .gesture(
                 DragGesture(minimumDistance: 0)
                     .onChanged { value in
-                        drag = max(0.4, min(Double(value.translation.height) / 40, 1))
-                        // Push it all the way down and it goes without waiting for you to let go.
-                        if drag >= 0.99 && !alreadyFlushed {
-                            alreadyFlushed = true
-                            onPull()
+                        // The lever bottoms out quickly; after that it is all hold.
+                        drag = max(0.55, min(0.55 + Double(value.translation.height) / 40, 1))
+                        if holdStart == nil {
+                            holdStart = Date()
+                            Haptics.shared.tick()
                         }
                     }
                     .onEnded { _ in
-                        if !alreadyFlushed { onPull() }
-                        alreadyFlushed = false
+                        let held = holdStart.map { Date().timeIntervalSince($0) } ?? 0
+                        holdStart = nil
                         drag = 0
+                        onPull(FlushGrade.grade(forHold: held))
                     }
             )
             .accessibilityElement()
             .accessibilityLabel("Flush handle")
-            .accessibilityHint("Flushes the toilet")
+            .accessibilityHint("Hold to flush. Let go inside the window for a perfect flush.")
             .accessibilityAddTraits(.isButton)
-            .accessibilityAction { onPull() }
+            // VoiceOver cannot hold a lever, so it always gets a clean one.
+            .accessibilityAction { onPull(.good) }
     }
 }

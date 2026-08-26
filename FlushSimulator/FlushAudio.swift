@@ -20,9 +20,16 @@ final class FlushAudio {
 
     private var ordinary: [AVAudioPCMBuffer] = []
     private var golden: AVAudioPCMBuffer?
-    private var isPrepared = false
     private var isPreparing = false
     private var isConfigured = false
+
+    /// Which voice is currently sitting in the buffers, or nil if none is.
+    ///
+    /// Doubles as the "ready to play" flag: it is only set once rendering has
+    /// actually produced buffers, so a failed render retries rather than leaving
+    /// the app permanently silent. Fixtures are rendered on demand rather than all
+    /// at once — a take is ~767KB, and there are four per voice.
+    private var renderedVoice: FlushProfile?
 
     private static let muteKey = "flushMuted"
 
@@ -34,10 +41,11 @@ final class FlushAudio {
         }
     }
 
-    /// Renders the sound and wires up the engine. Safe to call more than once.
-    func prepare() {
+    /// Renders one fixture's voice and wires up the engine. Safe to call more than
+    /// once, and cheap when the voice asked for is already loaded.
+    func prepare(_ voice: FlushProfile) {
         queue.async { [self] in
-            guard !isPrepared, !isPreparing else { return }
+            guard renderedVoice != voice, !isPreparing else { return }
             isPreparing = true
             defer { isPreparing = false }
 
@@ -50,19 +58,24 @@ final class FlushAudio {
 
             // Three takes so the same noise doesn't repeat back to back.
             let seeds: [UInt64] = [11, 4_242, 90_210]
-            ordinary = seeds.compactMap { render(format: format, seed: $0, golden: false) }
-            golden = render(format: format, seed: 777, golden: true)
-            isPrepared = !ordinary.isEmpty && golden != nil
+            let takes = seeds.compactMap { render(format: format, seed: $0, golden: false, voice) }
+            let rare = render(format: format, seed: 777, golden: true, voice)
+
+            guard !takes.isEmpty, rare != nil else { return }
+            ordinary = takes
+            golden = rare
+            renderedVoice = voice
         }
     }
 
-    func play(golden playGolden: Bool) {
+    func play(golden playGolden: Bool, voice: FlushProfile) {
         guard !isMuted else { return }
-        // Keep preparation and this request ordered on the serial queue. This
-        // makes a pull immediately after launch play as soon as rendering ends.
-        prepare()
+        // Keep preparation and this request ordered on the serial queue. This makes
+        // a pull immediately after launch — or immediately after swapping fixtures —
+        // play as soon as rendering ends.
+        prepare(voice)
         queue.async { [self] in
-            guard isPrepared else { return }
+            guard renderedVoice == voice else { return }
             playPrepared(golden: playGolden)
         }
     }
@@ -90,7 +103,7 @@ final class FlushAudio {
 
     // MARK: - Synthesis
 
-    private func render(format: AVAudioFormat, seed: UInt64, golden: Bool) -> AVAudioPCMBuffer? {
+    private func render(format: AVAudioFormat, seed: UInt64, golden: Bool, _ p: FlushProfile) -> AVAudioPCMBuffer? {
         let seconds = 4.35
         let frameCount = AVAudioFrameCount(seconds * sampleRate)
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount),
@@ -110,23 +123,23 @@ final class FlushAudio {
 
             // The handle bottoming out.
             if t < 0.22 {
-                sample += sin(2 * .pi * 94 * t) * exp(-t * 32) * 0.45
+                sample += sin(2 * .pi * p.clunkFrequency * t) * exp(-t * 32) * 0.45
                 sample += n * exp(-t * 85) * 0.30
             }
 
             // The main event: bright at first, dropping as the bowl empties.
             let roarLevel = envelope(t, from: 0.08, peak: 0.45, hold: 1.85, until: 2.85)
             if roarLevel > 0 {
-                let sweep = 1_250 - 880 * clamp((t - 0.18) / 1.7)
+                let sweep = p.roarFrom - (p.roarFrom - p.roarTo) * clamp((t - 0.18) / 1.7)
                 roar.tune(to: sweep, q: 1.15)
-                body.tune(to: 165, q: 0.8)
+                body.tune(to: p.bodyFrequency, q: 0.8)
                 sample += (roar.bandPass(n) * 0.55 + body.lowPass(n) * 0.85) * roarLevel
             }
 
             // The uneven glugging underneath it.
             let gurgleLevel = envelope(t, from: 0.45, peak: 0.85, hold: 1.95, until: 2.55)
             if gurgleLevel > 0 {
-                gurgle.tune(to: 620 + 250 * sin(2 * .pi * 1.7 * t), q: 5)
+                gurgle.tune(to: p.gurgleCentre + p.gurgleSwing * sin(2 * .pi * 1.7 * t), q: 5)
                 let wobble = 0.55 + 0.45 * sin(2 * .pi * (5.5 + 2.5 * sin(2 * .pi * 0.7 * t)) * t)
                 sample += gurgle.bandPass(n) * gurgleLevel * wobble * 0.85
             }
@@ -134,14 +147,14 @@ final class FlushAudio {
             // The tank filling back up, rising in pitch as it gets full.
             let hissLevel = envelope(t, from: 2.00, peak: 2.35, hold: 3.30, until: 4.15)
             if hissLevel > 0 {
-                hiss.tune(to: 2_150 + 950 * clamp((t - 2.2) / 1.6), q: 0.9)
+                hiss.tune(to: p.hissFrom + (p.hissTo - p.hissFrom) * clamp((t - 2.2) / 1.6), q: 0.9)
                 sample += hiss.bandPass(n) * hissLevel * 0.30
             }
 
             // The float valve shutting off.
             if t > 4.10 {
                 let since = t - 4.10
-                sample += sin(2 * .pi * 118 * since) * exp(-since * 38) * 0.32
+                sample += sin(2 * .pi * p.valveFrequency * since) * exp(-since * 38) * 0.32
             }
 
             // A little fanfare, for the rare ones.

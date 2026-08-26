@@ -6,20 +6,24 @@ struct ContentView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var isMuted = FlushAudio.shared.isMuted
     @State private var isConfirmingReset = false
+    @State private var isShowingBoard = false
     @State private var hintPulse = false
 
     private var palette: Palette {
-        engine.showsGold ? .golden(colorScheme) : .standard(colorScheme)
+        // Gold is an overlay on whatever is installed, not a fixture of its own.
+        engine.showsGold ? .golden(colorScheme) : engine.fixture.palette(colorScheme)
     }
 
     var body: some View {
         ZStack {
-            BathroomBackground(palette: palette)
+            BathroomBackground(palette: palette, surface: engine.fixture.surface)
                 .ignoresSafeArea()
 
             VStack(spacing: 10) {
                 header
                 stage
+                fixtureBar
+                upkeepBar
                 statsCard
                 hint
             }
@@ -39,8 +43,13 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.45), value: engine.showsGold)
+        .sheet(isPresented: $isShowingBoard) {
+            LeaderboardView(standings: engine.standings,
+                            lifetime: engine.totalFlushes,
+                            palette: palette)
+        }
         .task {
-            FlushAudio.shared.prepare()
+            FlushAudio.shared.prepare(engine.profile)
             Haptics.shared.prepare()
         }
         .onAppear {
@@ -70,6 +79,16 @@ struct ContentView: View {
             }
             Spacer(minLength: 8)
             Button {
+                isShowingBoard = true
+            } label: {
+                Image(systemName: "list.number")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(palette.porcelainLight.opacity(0.55)))
+            }
+            .accessibilityLabel("Leaderboard")
+
+            Button {
                 isMuted.toggle()
                 FlushAudio.shared.isMuted = isMuted
             } label: {
@@ -83,13 +102,33 @@ struct ContentView: View {
         .foregroundStyle(palette.ink)
     }
 
+    private var fixtureBar: some View {
+        FixtureBar(fixtures: Fixture.all,
+                   equipped: engine.fixture,
+                   totalFlushes: engine.totalFlushes,
+                   palette: palette,
+                   onPick: { engine.equip($0) })
+    }
+
+    private var upkeepBar: some View {
+        UpkeepBar(paper: $engine.paper,
+                  grime: engine.grime,
+                  isClogged: engine.isClogged,
+                  plunges: engine.plunges,
+                  palette: palette,
+                  onWand: { engine.useWand() },
+                  onPlunge: { engine.plunge() })
+    }
+
     private var stage: some View {
         GeometryReader { geometry in
             let scale = min(geometry.size.width / ToiletView.designSize.width,
                             geometry.size.height / ToiletView.designSize.height)
             ToiletView(flushStart: engine.flushStart,
                        palette: palette,
-                       onPull: { engine.pullHandle() })
+                       profile: engine.activeProfile,
+                       grime: engine.grime,
+                       onPull: { engine.pullHandle($0) })
                 .scaleEffect(scale)
                 .frame(width: geometry.size.width, height: geometry.size.height)
         }
@@ -104,6 +143,11 @@ struct ContentView: View {
                 stat(title: "LIFETIME FLUSHES", value: engine.totalFlushes.formatted())
                 Divider().frame(height: 32)
                 stat(title: "GOLDEN", value: engine.goldenFlushes.formatted())
+                Divider().frame(height: 32)
+                // Shows what you are on while a run is alive, and what you managed
+                // once it is over.
+                stat(title: engine.streak > 0 ? "STREAK" : "BEST STREAK",
+                     value: (engine.streak > 0 ? engine.streak : engine.bestStreak).formatted())
             }
 
             VStack(spacing: 6) {
