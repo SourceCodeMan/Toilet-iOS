@@ -55,9 +55,9 @@ final class FlushAudio {
             guard isPrepared else { return }
             guard let buffer = playGolden ? golden : ordinary.randomElement() else { return }
 
-            // .ambient keeps the ringer switch meaningful and leaves other audio alone,
-            // which matters for an app somebody might open in an actual bathroom.
-            try? AVAudioSession.sharedInstance().setCategory(.ambient)
+            // .playback so the flush is audible even with the ringer silenced; .mixWithOthers
+            // so it still leaves whatever music you had going alone.
+            try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
             try? AVAudioSession.sharedInstance().setActive(true)
 
             if !engine.isRunning {

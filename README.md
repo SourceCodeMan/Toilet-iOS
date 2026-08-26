@@ -64,8 +64,9 @@ buffers on a background queue, so none of that arithmetic goes anywhere near the
 audio render thread. Three seeded variants play at random so the same noise never
 repeats back to back.
 
-The session uses the `.ambient` category: the ringer switch still means something,
-and your music keeps playing. There's a mute button in the corner too.
+The session uses the `.playback` category with `.mixWithOthers`: the flush is
+audible even with the ringer silenced, and your music keeps playing. There's a
+mute button in the corner too.
 
 **Haptics are a real pattern**, not a single buzz — a sharp transient for the
 lever, then a continuous rumble with an intensity curve that swells and fades
