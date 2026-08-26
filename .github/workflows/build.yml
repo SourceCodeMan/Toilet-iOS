@@ -1,0 +1,29 @@
+name: Build
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: iOS Simulator
+    runs-on: macos-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Toolchain
+        run: xcodebuild -version && swift --version
+
+      # A generic destination rather than a named device, so the build doesn't
+      # depend on which simulators happen to be installed on the runner.
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project FlushSimulator.xcodeproj \
+            -scheme FlushSimulator \
+            -destination 'generic/platform=iOS Simulator' \
+            CODE_SIGNING_ALLOWED=NO
