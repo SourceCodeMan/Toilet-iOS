@@ -51,6 +51,19 @@ enum Upkeep {
         }
     }
 
+    /// What a golden flush is worth over an ordinary one.
+    static let goldenBonus: Double = 3.0
+
+    /// What one flush is worth on the board.
+    ///
+    /// The multiplier above is the whole reason to risk more paper, so it has to
+    /// land somewhere the player can see. Without this, paper is pure downside:
+    /// more grime and more clogs for nothing.
+    static func points(paper: Int, golden: Bool) -> Int {
+        let base = 100.0 * multiplier(forPaper: paper)
+        return Int((golden ? base * goldenBonus : base).rounded())
+    }
+
     // MARK: - Gold
 
     /// One flush in this many is golden with a filthy bowl and no streak going.

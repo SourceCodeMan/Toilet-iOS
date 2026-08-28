@@ -43,11 +43,14 @@ enum Quips {
         "GOLDEN FLUSH. You lucky thing."
     ]
 
-    private static var lastLine: String?
+    /// Pinned to the main actor rather than left a free-floating mutable global,
+    /// which is an error under Swift 6. Everything that asks for a line is already
+    /// on the main actor anyway.
+    @MainActor private static var lastLine: String?
 
-    static func afterFlushLine() -> String { pick(from: afterFlush) }
-    static func busyLine() -> String { pick(from: whileBusy) }
-    static func goldenLine() -> String { pick(from: golden) }
+    @MainActor static func afterFlushLine() -> String { pick(from: afterFlush) }
+    @MainActor static func busyLine() -> String { pick(from: whileBusy) }
+    @MainActor static func goldenLine() -> String { pick(from: golden) }
 
     /// A line for round numbers, because round numbers deserve acknowledgement.
     static func milestone(for count: Int) -> String? {
@@ -65,7 +68,7 @@ enum Quips {
     }
 
     /// Never the same line twice in a row, which is most of what makes it feel written.
-    private static func pick(from lines: [String]) -> String {
+    @MainActor private static func pick(from lines: [String]) -> String {
         let choices = lines.count > 1 ? lines.filter { $0 != lastLine } : lines
         let line = choices.randomElement() ?? lines[0]
         lastLine = line

@@ -14,9 +14,31 @@ import AVFoundation
 /// noise rather than the standard toilet's running on past it. It is the fixture's
 /// length and not the graded one: a voice is cached per fixture, and a cistern
 /// refills in its own time however the handle was pulled.
-final class FlushAudio {
+/// `@unchecked Sendable` because the synchronisation here is by hand rather than by
+/// the compiler: every mutable field below — the buffers, the flags, the rendered
+/// voice, the engine and the player — is only ever touched inside `queue`, which is
+/// serial. `isMuted` is the one exception and it only reads `UserDefaults`, which is
+/// thread-safe in its own right.
+final class FlushAudio: @unchecked Sendable {
 
     static let shared = FlushAudio()
+
+    private init() {
+        // A media services reset tears the engine down under us and it never comes
+        // back on its own, which leaves the app silent for the rest of the session.
+        NotificationCenter.default.addObserver(
+            forName: AVAudioSession.mediaServicesWereResetNotification,
+            object: nil,
+            queue: nil
+        ) { [weak self] _ in
+            self?.queue.async { [weak self] in
+                guard let self else { return }
+                isConfigured = false
+                isSessionReady = false
+                renderedVoice = nil          // the buffers went with it
+            }
+        }
+    }
 
     private let engine = AVAudioEngine()
     private let player = AVAudioPlayerNode()
@@ -25,8 +47,8 @@ final class FlushAudio {
 
     private var ordinary: [AVAudioPCMBuffer] = []
     private var golden: AVAudioPCMBuffer?
-    private var isPreparing = false
     private var isConfigured = false
+    private var isSessionReady = false
 
     /// Which voice is currently sitting in the buffers, or nil if none is.
     ///
@@ -51,9 +73,7 @@ final class FlushAudio {
     /// once, and cheap when the voice asked for is already loaded.
     func prepare(_ voice: FlushProfile) {
         queue.async { [self] in
-            guard renderedVoice != voice, !isPreparing else { return }
-            isPreparing = true
-            defer { isPreparing = false }
+            guard renderedVoice != voice else { return }
 
             guard let format = AVAudioFormat(standardFormatWithSampleRate: sampleRate, channels: 1) else { return }
             if !isConfigured {
@@ -94,9 +114,14 @@ final class FlushAudio {
         guard let buffer = playGolden ? golden : ordinary.randomElement() else { return }
 
         // .playback so the flush is audible even with the ringer silenced; .mixWithOthers
-        // so it still leaves whatever music you had going alone.
-        try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
-        try? AVAudioSession.sharedInstance().setActive(true)
+        // so it still leaves whatever music you had going alone. Done once rather than
+        // per flush: re-activating the session on every pull churns other apps' audio
+        // for no gain.
+        if !isSessionReady {
+            try? AVAudioSession.sharedInstance().setCategory(.playback, options: [.mixWithOthers])
+            try? AVAudioSession.sharedInstance().setActive(true)
+            isSessionReady = true
+        }
 
         if !engine.isRunning {
             do { try engine.start() } catch { return }

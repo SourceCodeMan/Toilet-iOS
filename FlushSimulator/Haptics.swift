@@ -4,6 +4,7 @@ import UIKit
 /// The flush you can feel: a clunk from the handle, then a long rumble that
 /// fades out as the tank refills. Falls back to a plain impact on hardware
 /// without a Taptic Engine, and does nothing at all where there is none.
+@MainActor
 final class Haptics {
 
     static let shared = Haptics()
@@ -16,7 +17,11 @@ final class Haptics {
         do {
             let newEngine = try CHHapticEngine()
             newEngine.isAutoShutdownEnabled = true
-            newEngine.resetHandler = { [weak self] in try? self?.engine?.start() }
+            // CoreHaptics calls this from wherever it likes, so hop back before
+            // touching the engine we own.
+            newEngine.resetHandler = { [weak self] in
+                Task { @MainActor in try? self?.engine?.start() }
+            }
             try newEngine.start()
             engine = newEngine
         } catch {
@@ -40,7 +45,12 @@ final class Haptics {
 
     /// A short knock, for when you mash the handle mid-flush.
     func thud() {
-        guard isSupported else { return }
+        guard isSupported else {
+            // Hardware without a Taptic Engine still gets something, the same way
+            // `tick` and `flush` do.
+            UIImpactFeedbackGenerator(style: .rigid).impactOccurred(intensity: 0.5)
+            return
+        }
         play(events: [
             CHHapticEvent(eventType: .hapticTransient, parameters: [
                 CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.55),

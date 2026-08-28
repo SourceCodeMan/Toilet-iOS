@@ -4,7 +4,7 @@ import SwiftUI
 ///
 /// A golden flush swaps the whole thing out rather than tinting things one by one,
 /// which is why this is a struct passed down the tree instead of a pile of constants.
-struct Palette {
+struct Palette: Sendable {
     var porcelainLight: Color
     var porcelainMid: Color
     var porcelainDark: Color
@@ -24,7 +24,7 @@ struct Palette {
     var ink: Color
     var accent: Color
 
-    static func standard(_ scheme: ColorScheme) -> Palette {
+    @Sendable static func standard(_ scheme: ColorScheme) -> Palette {
         let dark = scheme == .dark
         return Palette(
             porcelainLight: Color(red: 1.00, green: 1.00, blue: 1.00),
@@ -46,7 +46,7 @@ struct Palette {
     }
 
     /// Weathered pine, tin fittings, and water you would rather not look at.
-    static func outhouse(_ scheme: ColorScheme) -> Palette {
+    @Sendable static func outhouse(_ scheme: ColorScheme) -> Palette {
         let dark = scheme == .dark
         return Palette(
             porcelainLight: Color(red: 0.72, green: 0.58, blue: 0.41),
@@ -68,7 +68,7 @@ struct Palette {
     }
 
     /// Cream porcelain, brass, and a great deal of self-regard.
-    static func victorian(_ scheme: ColorScheme) -> Palette {
+    @Sendable static func victorian(_ scheme: ColorScheme) -> Palette {
         let dark = scheme == .dark
         return Palette(
             porcelainLight: Color(red: 1.00, green: 0.99, blue: 0.95),
@@ -90,7 +90,7 @@ struct Palette {
     }
 
     /// Brushed steel, hard light, and no warmth anywhere.
-    static func chrome(_ scheme: ColorScheme) -> Palette {
+    @Sendable static func chrome(_ scheme: ColorScheme) -> Palette {
         let dark = scheme == .dark
         return Palette(
             porcelainLight: Color(red: 0.95, green: 0.96, blue: 0.97),
@@ -112,7 +112,7 @@ struct Palette {
     }
 
     /// Matte white composite under cold instrument light. No sky to speak of.
-    static func orbital(_ scheme: ColorScheme) -> Palette {
+    @Sendable static func orbital(_ scheme: ColorScheme) -> Palette {
         let dark = scheme == .dark
         return Palette(
             porcelainLight: Color(red: 0.97, green: 0.97, blue: 0.99),
@@ -134,7 +134,7 @@ struct Palette {
     }
 
     /// One flush in twenty. Worth making a fuss about.
-    static func golden(_ scheme: ColorScheme) -> Palette {
+    @Sendable static func golden(_ scheme: ColorScheme) -> Palette {
         let dark = scheme == .dark
         return Palette(
             porcelainLight: Color(red: 1.00, green: 0.97, blue: 0.84),

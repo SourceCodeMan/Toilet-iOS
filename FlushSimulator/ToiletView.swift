@@ -23,6 +23,8 @@ struct ToiletView: View {
     /// from here, and the meter reads from the same clock.
     @State private var holdStart: Date?
 
+    @Environment(\.scenePhase) private var scenePhase
+
     var body: some View {
         Group {
             if let flushStart {
@@ -45,6 +47,18 @@ struct ToiletView: View {
                     .transition(.opacity)
             }
         }
+        // A drag interrupted by a call, a system edge swipe or the app going away
+        // may never deliver `onEnded`, which would leave the meter counting up for
+        // the rest of the session.
+        .onChange(of: scenePhase) { _, phase in
+            if phase != .active { releaseHandle() }
+        }
+        .onDisappear(perform: releaseHandle)
+    }
+
+    private func releaseHandle() {
+        holdStart = nil
+        drag = 0
     }
 
     private func scene(elapsed: Double?) -> some View {
