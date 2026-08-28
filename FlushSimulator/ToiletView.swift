@@ -50,7 +50,7 @@ struct ToiletView: View {
     private func scene(elapsed: Double?) -> some View {
         let level = elapsed.map { FlushTimeline.level(at: $0, profile) } ?? profile.restingLevel
         let spin = elapsed.map { FlushTimeline.spin(at: $0, profile) } ?? 0
-        let churn = elapsed.map(FlushTimeline.turbulence(at:)) ?? 0
+        let churn = elapsed.map { FlushTimeline.turbulence(at: $0, profile) } ?? 0
         let shake = elapsed.map { FlushTimeline.rumble(at: $0, profile) } ?? 0
         // Once the flush owns the handle, the finger stops mattering.
         let push = elapsed.map(FlushTimeline.handlePush(at:)) ?? drag

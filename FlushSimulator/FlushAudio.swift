@@ -9,6 +9,11 @@ import AVFoundation
 ///
 /// Buffers are rendered once on a background queue and played back whole, which
 /// keeps every bit of this arithmetic well away from the audio render thread.
+///
+/// A take is rendered at the fixture's own length, so a brief fixture gets a brief
+/// noise rather than the standard toilet's running on past it. It is the fixture's
+/// length and not the graded one: a voice is cached per fixture, and a cistern
+/// refills in its own time however the handle was pulled.
 final class FlushAudio {
 
     static let shared = FlushAudio()
@@ -28,7 +33,8 @@ final class FlushAudio {
     /// Doubles as the "ready to play" flag: it is only set once rendering has
     /// actually produced buffers, so a failed render retries rather than leaving
     /// the app permanently silent. Fixtures are rendered on demand rather than all
-    /// at once — a take is ~767KB, and there are four per voice.
+    /// at once — a take is 550-980KB depending on the fixture, and there are four
+    /// per voice.
     private var renderedVoice: FlushProfile?
 
     private static let muteKey = "flushMuted"
@@ -104,7 +110,11 @@ final class FlushAudio {
     // MARK: - Synthesis
 
     private func render(format: AVAudioFormat, seed: UInt64, golden: Bool, _ p: FlushProfile) -> AVAudioPCMBuffer? {
-        let seconds = 4.35
+        // Every moment below was tuned against the standard toilet, so the whole
+        // take stretches with this fixture's own duration and lands where its flush
+        // does. The clunk is the exception: a knock is a knock on any cistern.
+        let s = p.timeScale
+        let seconds = 4.35 * s
         let frameCount = AVAudioFrameCount(seconds * sampleRate)
         guard let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: frameCount),
               let channel = buffer.floatChannelData?[0] else { return nil }
@@ -128,16 +138,16 @@ final class FlushAudio {
             }
 
             // The main event: bright at first, dropping as the bowl empties.
-            let roarLevel = envelope(t, from: 0.08, peak: 0.45, hold: 1.85, until: 2.85)
+            let roarLevel = envelope(t, from: 0.08 * s, peak: 0.45 * s, hold: 1.85 * s, until: 2.85 * s)
             if roarLevel > 0 {
-                let sweep = p.roarFrom - (p.roarFrom - p.roarTo) * clamp((t - 0.18) / 1.7)
+                let sweep = p.roarFrom - (p.roarFrom - p.roarTo) * clamp((t - 0.18 * s) / (1.7 * s))
                 roar.tune(to: sweep, q: 1.15)
                 body.tune(to: p.bodyFrequency, q: 0.8)
                 sample += (roar.bandPass(n) * 0.55 + body.lowPass(n) * 0.85) * roarLevel
             }
 
             // The uneven glugging underneath it.
-            let gurgleLevel = envelope(t, from: 0.45, peak: 0.85, hold: 1.95, until: 2.55)
+            let gurgleLevel = envelope(t, from: 0.45 * s, peak: 0.85 * s, hold: 1.95 * s, until: 2.55 * s)
             if gurgleLevel > 0 {
                 gurgle.tune(to: p.gurgleCentre + p.gurgleSwing * sin(2 * .pi * 1.7 * t), q: 5)
                 let wobble = 0.55 + 0.45 * sin(2 * .pi * (5.5 + 2.5 * sin(2 * .pi * 0.7 * t)) * t)
@@ -145,22 +155,23 @@ final class FlushAudio {
             }
 
             // The tank filling back up, rising in pitch as it gets full.
-            let hissLevel = envelope(t, from: 2.00, peak: 2.35, hold: 3.30, until: 4.15)
+            let hissLevel = envelope(t, from: 2.00 * s, peak: 2.35 * s, hold: 3.30 * s, until: 4.15 * s)
             if hissLevel > 0 {
-                hiss.tune(to: p.hissFrom + (p.hissTo - p.hissFrom) * clamp((t - 2.2) / 1.6), q: 0.9)
+                hiss.tune(to: p.hissFrom + (p.hissTo - p.hissFrom) * clamp((t - 2.2 * s) / (1.6 * s)), q: 0.9)
                 sample += hiss.bandPass(n) * hissLevel * 0.30
             }
 
             // The float valve shutting off.
-            if t > 4.10 {
-                let since = t - 4.10
+            if t > 4.10 * s {
+                let since = t - 4.10 * s
                 sample += sin(2 * .pi * p.valveFrequency * since) * exp(-since * 38) * 0.32
             }
 
             // A little fanfare, for the rare ones.
             if golden {
                 for (step, frequency) in Self.fanfare.enumerated() {
-                    let start = 2.15 + Double(step) * 0.13
+                    // The run itself keeps its tempo; only where it lands moves.
+                    let start = 2.15 * s + Double(step) * 0.13
                     guard t > start else { continue }
                     let since = t - start
                     sample += sin(2 * .pi * frequency * since) * exp(-since * 3.2) * 0.15

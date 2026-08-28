@@ -54,6 +54,17 @@ struct FlushProfile: Equatable {
     /// The float valve shutting off at the end.
     var valveFrequency: Double
 
+    // MARK: - Timing
+
+    /// How this flush's timing compares with the original toilet's.
+    ///
+    /// Every hard-coded moment in `FlushTimeline`, `FlushAudio` and `Haptics` was
+    /// tuned against `.standard`, so those files scale their constants by this
+    /// rather than each learning what a fixture is. A 2.6-second fixture gets the
+    /// same shape as the 3.6-second one it was tuned from, and `.standard` — where
+    /// this is exactly 1 — is left untouched.
+    var timeScale: Double { max(duration, 0.1) / FlushProfile.standard.duration }
+
     /// The original toilet, to the number. Changing anything here changes the app
     /// that already shipped, so don't — add a new profile instead.
     static let standard = FlushProfile(

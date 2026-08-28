@@ -104,9 +104,19 @@ final class FlushEngine: ObservableObject {
         fixture = total >= saved.unlockAt ? saved : .standard
     }
 
-    /// Install a fixture. Silently refuses one that has not been earned.
+    /// Install a fixture. Silently refuses one that has not been earned, and says so
+    /// about one asked for mid-flush.
     func equip(_ new: Fixture) {
         guard totalFlushes >= new.unlockAt, new != fixture else { return }
+
+        // Swapping mid-flush would pull the profile out from under the running
+        // animation while the flush still ends on the old fixture's duration.
+        guard !isFlushing else {
+            Haptics.shared.thud()
+            show(Message(text: "Not mid-flush.", kind: .busy))
+            return
+        }
+
         withAnimation(.snappy) { fixture = new }
         defaults.set(new.id, forKey: Key.fixture)
         FlushAudio.shared.prepare(new.profile)
@@ -153,8 +163,10 @@ final class FlushEngine: ObservableObject {
         flushStart = Date()
         withAnimation(.easeOut(duration: 0.25)) { message = nil }
 
+        // The picture is graded, the noise and the buzz are not: both are cached per
+        // fixture, and a cistern refills in its own time however you pulled the lever.
         FlushAudio.shared.play(golden: isGolden, voice: fixture.profile)
-        Haptics.shared.flush(golden: isGolden)
+        Haptics.shared.flush(golden: isGolden, scale: fixture.profile.timeScale)
 
         flushTask?.cancel()
         // Read the duration before the task: the closure holds self weakly.

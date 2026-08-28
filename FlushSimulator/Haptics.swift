@@ -49,7 +49,10 @@ final class Haptics {
         ], curves: [])
     }
 
-    func flush(golden: Bool) {
+    /// `scale` stretches the buzz with the fixture, the same way the noise and the
+    /// picture stretch. It is the fixture's scale rather than the graded one, so the
+    /// golden taps stay locked to the golden notes, which are cached per fixture.
+    func flush(golden: Bool, scale: Double = 1) {
         guard isSupported else {
             UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             return
@@ -65,7 +68,7 @@ final class Haptics {
             CHHapticEvent(eventType: .hapticContinuous, parameters: [
                 CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.75),
                 CHHapticEventParameter(parameterID: .hapticSharpness, value: 0.3)
-            ], relativeTime: 0.10, duration: 2.9)
+            ], relativeTime: 0.10 * scale, duration: 2.9 * scale)
         ]
 
         if golden {
@@ -73,16 +76,16 @@ final class Haptics {
                 events.append(CHHapticEvent(eventType: .hapticTransient, parameters: [
                     CHHapticEventParameter(parameterID: .hapticIntensity, value: 0.8),
                     CHHapticEventParameter(parameterID: .hapticSharpness, value: 1)
-                ], relativeTime: 2.15 + Double(step) * 0.13))
+                ], relativeTime: 2.15 * scale + Double(step) * 0.13))
             }
         }
 
         let swell = CHHapticParameterCurve(parameterID: .hapticIntensityControl, controlPoints: [
             CHHapticParameterCurve.ControlPoint(relativeTime: 0, value: 0.2),
-            CHHapticParameterCurve.ControlPoint(relativeTime: 0.35, value: 1),
-            CHHapticParameterCurve.ControlPoint(relativeTime: 1.5, value: 0.7),
-            CHHapticParameterCurve.ControlPoint(relativeTime: 2.9, value: 0.05)
-        ], relativeTime: 0.10)
+            CHHapticParameterCurve.ControlPoint(relativeTime: 0.35 * scale, value: 1),
+            CHHapticParameterCurve.ControlPoint(relativeTime: 1.5 * scale, value: 0.7),
+            CHHapticParameterCurve.ControlPoint(relativeTime: 2.9 * scale, value: 0.05)
+        ], relativeTime: 0.10 * scale)
 
         play(events: events, curves: [swell])
     }
