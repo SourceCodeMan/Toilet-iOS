@@ -52,31 +52,82 @@ final class GlobalBoard: ObservableObject {
 
     private var isAuthenticated: Bool { GKLocalPlayer.local.isAuthenticated }
 
+    /// Everyone currently waiting on a verdict from GameKit.
+    private var waiting: [CheckedContinuation<Void, Never>] = []
+    private var isHandlerInstalled = false
+
+    /// How long to wait before admitting Game Center is not going to answer.
+    ///
+    /// The sign-in sheet can be dismissed in ways that never call back, and a tab
+    /// stuck on a spinner forever is worse than one that says it does not know.
+    private static let timeout: Duration = .seconds(20)
+
+    /// Has GameKit already told us something we can act on?
+    private var hasVerdict: Bool {
+        switch state {
+        case .signedOut, .failed: return true
+        default:                  return false
+        }
+    }
+
     // MARK: - Signing in
 
     /// Asks Game Center who you are, presenting its sign-in sheet if it wants to.
     func authenticate() async {
         guard !isAuthenticated else { return }
+        installHandler()
+
+        // GameKit only calls the handler when it has something new to say, so once it
+        // has given a verdict, asking again would wait out the timeout for nothing.
+        // A later sign-in from Settings calls the handler and corrects this by itself.
+        guard !hasVerdict else { return }
+
         state = .working
 
-        await withCheckedContinuation { (done: CheckedContinuation<Void, Never>) in
-            var resumed = false
-            GKLocalPlayer.local.authenticateHandler = { viewController, error in
+        let deadline = Task { [weak self] in
+            try? await Task.sleep(for: Self.timeout)
+            guard !Task.isCancelled else { return }
+            self?.giveUp()
+        }
+        await withCheckedContinuation { waiting.append($0) }
+        deadline.cancel()
+    }
+
+    /// GameKit keeps exactly one authenticate handler, and installing a second one
+    /// strands whoever was waiting on the first, so it goes in once and everything
+    /// that needs a verdict queues up behind it.
+    private func installHandler() {
+        guard !isHandlerInstalled else { return }
+        isHandlerInstalled = true
+
+        GKLocalPlayer.local.authenticateHandler = { viewController, error in
+            // GameKit does not promise which thread this arrives on, so hop onto the
+            // main actor rather than assuming it.
+            Task { @MainActor [weak self] in
+                guard let self else { return }
                 if let viewController {
                     Self.present(viewController)
                     return                       // the sheet calls back again later
                 }
-                guard !resumed else { return }
-                resumed = true
-
                 if let error {
-                    self.state = .failed(error.localizedDescription)
+                    self.state = Self.describe(error)
                 } else if !GKLocalPlayer.local.isAuthenticated {
                     self.state = .signedOut
                 }
-                done.resume()
+                self.wakeWaiters()
             }
         }
+    }
+
+    private func giveUp() {
+        if case .working = state { state = .failed("Game Center didn't answer.") }
+        wakeWaiters()
+    }
+
+    private func wakeWaiters() {
+        let waiters = waiting
+        waiting = []
+        waiters.forEach { $0.resume() }
     }
 
     // MARK: - Reading and writing
@@ -109,9 +160,27 @@ final class GlobalBoard: ObservableObject {
                       isYou: $0.player.gamePlayerID == me || $0.rank == mine?.rank)
             })
         } catch {
-            // An unconfigured leaderboard and a network failure look similar from
-            // here, so say which one we believe it is rather than guessing wrongly.
-            state = .notConfigured
+            state = Self.describe(error)
+        }
+    }
+
+    /// An unconfigured leaderboard and a network failure look similar from here, so
+    /// go by what GameKit actually said rather than assuming the usual case. The one
+    /// unambiguous signal for "not configured" is a board that simply is not there,
+    /// which `refresh` reads off an empty result rather than off a thrown error.
+    private static func describe(_ error: Error) -> State {
+        let failure = error as NSError
+        guard failure.domain == GKErrorDomain,
+              let code = GKError.Code(rawValue: failure.code)
+        else { return .failed(error.localizedDescription) }
+
+        switch code {
+        case .notAuthenticated, .invalidCredentials, .notAuthorized, .userDenied, .cancelled:
+            return .signedOut
+        case .gameUnrecognized, .notSupported, .apiNotAvailable:
+            return .notConfigured
+        default:
+            return .failed(error.localizedDescription)
         }
     }
 
@@ -129,10 +198,20 @@ final class GlobalBoard: ObservableObject {
 
     // MARK: - Plumbing
 
+    /// The leaderboard is itself a sheet, so the root view controller is already
+    /// presenting by the time Game Center asks for its own. Presenting on a
+    /// controller that is already presenting is refused outright and the sign-in
+    /// sheet never appears, so walk to whatever is actually on top.
     private static func present(_ viewController: UIViewController) {
         let scene = UIApplication.shared.connectedScenes
             .compactMap { $0 as? UIWindowScene }
             .first { $0.activationState == .foregroundActive }
-        scene?.keyWindow?.rootViewController?.present(viewController, animated: true)
+        guard let root = scene?.keyWindow?.rootViewController else { return }
+
+        var top = root
+        while let next = top.presentedViewController, !next.isBeingDismissed { top = next }
+        guard top.presentedViewController == nil else { return }
+
+        top.present(viewController, animated: true)
     }
 }
