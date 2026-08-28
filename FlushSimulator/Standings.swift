@@ -18,7 +18,30 @@ struct Standings: Codable, Equatable {
         var golden: Int
         var bestStreak: Int
 
+        /// What the day's flushes were worth, paper and gold included.
+        var score: Int
+
         var id: Int { stamp }
+
+        init(stamp: Int, flushes: Int, golden: Int, bestStreak: Int, score: Int) {
+            self.stamp = stamp
+            self.flushes = flushes
+            self.golden = golden
+            self.bestStreak = bestStreak
+            self.score = score
+        }
+
+        /// History written before scoring existed has no `score`, and the synthesised
+        /// decoder would throw on the missing key — which `load` quietly turns into a
+        /// wiped board. Read it as optional so an upgrade keeps your days.
+        init(from decoder: Decoder) throws {
+            let box = try decoder.container(keyedBy: CodingKeys.self)
+            stamp = try box.decode(Int.self, forKey: .stamp)
+            flushes = try box.decode(Int.self, forKey: .flushes)
+            golden = try box.decode(Int.self, forKey: .golden)
+            bestStreak = try box.decode(Int.self, forKey: .bestStreak)
+            score = try box.decodeIfPresent(Int.self, forKey: .score) ?? 0
+        }
     }
 
     /// Newest first.
@@ -38,18 +61,20 @@ struct Standings: Codable, Equatable {
     }
 
     /// Add one flush to today's tally.
-    mutating func record(golden: Bool, streak: Int, on date: Date = Date()) {
+    mutating func record(golden: Bool, streak: Int, points: Int, on date: Date = Date()) {
         let today = Self.stamp(for: date)
 
         if let i = days.firstIndex(where: { $0.stamp == today }) {
             days[i].flushes += 1
             if golden { days[i].golden += 1 }
             days[i].bestStreak = max(days[i].bestStreak, streak)
+            days[i].score += points
         } else {
             days.insert(Day(stamp: today,
                             flushes: 1,
                             golden: golden ? 1 : 0,
-                            bestStreak: streak),
+                            bestStreak: streak,
+                            score: points),
                         at: 0)
             days.sort { $0.stamp > $1.stamp }
             if days.count > Self.historyLimit {
@@ -66,9 +91,12 @@ struct Standings: Codable, Equatable {
     }
 
     /// Best days first, ties broken by the more recent day.
+    ///
+    /// Ranked on score rather than raw flushes, so the paper you risk is worth
+    /// risking. Ranking on flushes made one careful square the only sane play.
     var board: [Day] {
         days.sorted {
-            $0.flushes == $1.flushes ? $0.stamp > $1.stamp : $0.flushes > $1.flushes
+            $0.score == $1.score ? $0.stamp > $1.stamp : $0.score > $1.score
         }
         .prefix(Self.boardLength)
         .map { $0 }

@@ -54,7 +54,7 @@ struct LeaderboardView: View {
                         ForEach(Array(standings.board.enumerated()), id: \.element.id) { i, day in
                             row(rank: i + 1,
                                 name: Standings.label(for: day.stamp),
-                                score: day.flushes,
+                                score: day.score,
                                 detail: detail(for: day),
                                 isYou: day.stamp == Standings.stamp(for: Date()))
                         }
@@ -71,13 +71,13 @@ struct LeaderboardView: View {
     private var headline: String {
         guard let today = standings.today else { return "Best days" }
         if let rank = standings.todaysRank {
-            return "Best days — today is #\(rank) with \(today.flushes)"
+            return "Best days — today is #\(rank) with \(today.score.formatted())"
         }
-        return "Best days — today has \(today.flushes) so far"
+        return "Best days — today has \(today.score.formatted()) so far"
     }
 
     private func detail(for day: Standings.Day) -> String {
-        var bits: [String] = []
+        var bits: [String] = ["\(day.flushes) flushes"]
         if day.golden > 0 { bits.append("\(day.golden) golden") }
         if day.bestStreak > 1 { bits.append("×\(day.bestStreak) streak") }
         return bits.joined(separator: " · ")
@@ -121,7 +121,7 @@ struct LeaderboardView: View {
         .task(id: scope) {
             guard scope == .global else { return }
             await global.refresh()
-            await global.submit(lifetime: lifetime, bestDay: standings.bestDay?.flushes ?? 0)
+            await global.submit(lifetime: lifetime, bestDay: standings.bestDay?.score ?? 0)
         }
     }
 

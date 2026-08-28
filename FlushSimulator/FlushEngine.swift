@@ -6,6 +6,7 @@ import SwiftUI
 /// The visuals are driven entirely by `flushStart` plus `FlushTimeline`, so the
 /// engine's only real jobs are starting the noise, keeping the tally, and picking
 /// something to say when the water settles.
+@MainActor
 final class FlushEngine: ObservableObject {
 
     struct Message: Equatable, Identifiable {
@@ -46,8 +47,6 @@ final class FlushEngine: ObservableObject {
     /// Pumps landed on the current blockage.
     @Published private(set) var plunges = 0
 
-    var isClean: Bool { grime <= Upkeep.cleanBelow }
-
     /// Day-by-day record, for the leaderboard.
     @Published private(set) var standings: Standings
 
@@ -70,9 +69,6 @@ final class FlushEngine: ObservableObject {
     /// How this fixture flushes and sounds.
     var profile: FlushProfile { fixture.profile }
 
-    /// Everything earned so far, for the picker.
-    var unlockedFixtures: [Fixture] { Fixture.unlocked(at: totalFlushes) }
-
     private enum Key {
         static let total = "totalFlushes"
         static let golden = "goldenFlushes"
@@ -84,6 +80,10 @@ final class FlushEngine: ObservableObject {
 
     private let defaults: UserDefaults
     private var flushTask: Task<Void, Never>?
+
+    /// Bumped whenever a flush is started or thrown away. A settle that belongs to
+    /// an older generation has been overtaken and must not write anything back.
+    private var generation = 0
     private var messageTask: Task<Void, Never>?
     private var celebrationTask: Task<Void, Never>?
 
@@ -169,20 +169,25 @@ final class FlushEngine: ObservableObject {
         Haptics.shared.flush(golden: isGolden, scale: fixture.profile.timeScale)
 
         flushTask?.cancel()
-        // Read the duration before the task: the closure holds self weakly.
+        generation += 1
+        // Read these before the task: the closure holds self weakly.
         let duration = activeProfile.duration
+        let mine = generation
         flushTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(duration))
             guard !Task.isCancelled else { return }
-            await self?.settle()
+            self?.settle(mine)
         }
     }
 
     func resetStats() {
-        // A flush settles asynchronously.  Invalidate it before clearing the
-        // counters so it cannot write one last flush back after the reset.
+        // A flush settles asynchronously. Cancelling is not enough on its own: the
+        // task checks for cancellation before hopping back here, so a reset landing
+        // in that window would still get one last flush written back. Moving the
+        // generation on is what actually invalidates it.
         flushTask?.cancel()
         flushTask = nil
+        generation += 1
         flushStart = nil
         isGolden = false
 
@@ -250,8 +255,10 @@ final class FlushEngine: ObservableObject {
 
     // MARK: - Aftermath
 
-    @MainActor
-    private func settle() {
+    private func settle(_ mine: Int) {
+        // Overtaken by a reset, or by a flush that started after this one.
+        guard mine == generation else { return }
+
         flushStart = nil
         let before = totalFlushes
         // Animated so the counter rolls over rather than snapping.
@@ -264,7 +271,9 @@ final class FlushEngine: ObservableObject {
             celebrate()
         }
 
-        standings.record(golden: isGolden, streak: streak)
+        standings.record(golden: isGolden,
+                         streak: streak,
+                         points: Upkeep.points(paper: paper, golden: isGolden))
         standings.save(to: defaults)
 
         // Every flush leaves a little behind, and paper leaves more.
@@ -309,13 +318,14 @@ final class FlushEngine: ObservableObject {
         celebrationStart = Date()
         celebrationTask?.cancel()
         celebrationTask = Task { [weak self] in
-            try? await Task.sleep(for: .seconds(3.4))
+            // Longer than the slowest flake takes to fall (3.75s), so the gold
+            // lands rather than blinking out mid-air.
+            try? await Task.sleep(for: .seconds(3.8))
             guard !Task.isCancelled else { return }
-            await self?.endCelebration()
+            self?.endCelebration()
         }
     }
 
-    @MainActor
     private func endCelebration() {
         withAnimation(.easeInOut(duration: 0.5)) { celebrationStart = nil }
     }
@@ -326,11 +336,10 @@ final class FlushEngine: ObservableObject {
         messageTask = Task { [weak self] in
             try? await Task.sleep(for: .seconds(2.9))
             guard !Task.isCancelled else { return }
-            await self?.dismiss(newMessage.id)
+            self?.dismiss(newMessage.id)
         }
     }
 
-    @MainActor
     private func dismiss(_ id: UUID) {
         guard message?.id == id else { return }
         withAnimation(.easeOut(duration: 0.35)) { message = nil }

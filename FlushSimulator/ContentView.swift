@@ -113,6 +113,7 @@ struct ContentView: View {
     private var upkeepBar: some View {
         UpkeepBar(paper: $engine.paper,
                   grime: engine.grime,
+                  isFlushing: engine.isFlushing,
                   isClogged: engine.isClogged,
                   plunges: engine.plunges,
                   palette: palette,
@@ -199,7 +200,9 @@ struct ContentView: View {
     }
 
     private var hint: some View {
-        Text(engine.totalFlushes == 0 ? "Push the handle" : "Tap or drag the handle")
+        // A tap grades as a half flush, so the hint has to say hold or it is
+        // teaching the one pull that breaks your streak.
+        Text(engine.totalFlushes == 0 ? "Hold the handle" : "Hold, then let go in the window")
             .font(.system(size: 12, weight: .semibold, design: .rounded))
             .foregroundStyle(palette.ink)
             .opacity(hintPulse ? 0.75 : 0.3)

@@ -8,6 +8,7 @@ struct UpkeepBar: View {
 
     @Binding var paper: Int
     var grime: Double
+    var isFlushing: Bool
     var isClogged: Bool
     var plunges: Int
     var palette: Palette
@@ -125,7 +126,8 @@ struct UpkeepBar: View {
             .background(Capsule(style: .continuous).fill(palette.ink.opacity(0.09)))
         }
         .buttonStyle(.plain)
-        .disabled(grime <= 0)
+        // The engine refuses to scrub mid-flush, so the button should not look live.
+        .disabled(grime <= 0 || isFlushing)
         .accessibilityLabel("Potty wand")
         .accessibilityValue(grime <= 0 ? "Bowl is clean" : "\(Int(grime * 100))% dirty")
         .accessibilityHint("Scrubs the bowl. A clean bowl flushes gold more often.")

@@ -14,7 +14,7 @@ enum RoomSurface {
     case bulkhead   // an instrument-lit hull
 }
 
-struct Fixture: Identifiable, Equatable {
+struct Fixture: Identifiable, Equatable, Sendable {
 
     let id: String
     let name: String
@@ -39,7 +39,7 @@ struct Fixture: Identifiable, Equatable {
     let profile: FlushProfile
 
     /// Built per colour scheme, the same way `Palette.standard` always was.
-    let palette: (ColorScheme) -> Palette
+    let palette: @Sendable (ColorScheme) -> Palette
 
     static func == (a: Fixture, b: Fixture) -> Bool { a.id == b.id }
 
@@ -49,16 +49,6 @@ struct Fixture: Identifiable, Equatable {
 
     static func with(id: String) -> Fixture {
         all.first { $0.id == id } ?? standard
-    }
-
-    /// Everything unlocked at this many lifetime flushes.
-    static func unlocked(at flushes: Int) -> [Fixture] {
-        all.filter { flushes >= $0.unlockAt }
-    }
-
-    /// The next one to look forward to, if there is one.
-    static func next(after flushes: Int) -> Fixture? {
-        all.first { flushes < $0.unlockAt }
     }
 
     // MARK: - Fixtures
