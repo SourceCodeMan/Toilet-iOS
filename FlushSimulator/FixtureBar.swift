@@ -51,6 +51,13 @@ struct FixtureBar: View {
                 Text(locked ? "\(fixture.unlockAt)" : fixture.name)
                     .font(.system(size: 12, weight: .semibold, design: .rounded))
                     .lineLimit(1)
+                // The payout is the whole reason to pick one over another, so it has
+                // to be on the chip rather than buried in a blurb.
+                if !locked {
+                    Text("×\(fixture.payout, specifier: "%.2g")")
+                        .font(.system(size: 11, weight: .heavy, design: .rounded))
+                        .opacity(isOn ? 0.9 : 0.55)
+                }
             }
             .foregroundStyle(isOn ? Color.white : palette.ink.opacity(locked ? 0.35 : 0.75))
             .padding(.horizontal, 12)
@@ -64,7 +71,7 @@ struct FixtureBar: View {
         .disabled(locked)
         .accessibilityLabel(locked
             ? "\(fixture.name), locked. \(fixture.unlockAt) flushes to unlock."
-            : fixture.name)
+            : "\(fixture.name), pays \(String(format: "%.2g", fixture.payout)) times")
         .accessibilityHint(locked ? "" : fixture.blurb)
         .accessibilityAddTraits(isOn ? [.isButton, .isSelected] : .isButton)
     }

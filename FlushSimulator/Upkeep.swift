@@ -69,6 +69,16 @@ enum Upkeep {
         return Int((golden ? base * goldenBonus : base).rounded())
     }
 
+    // MARK: - The tank
+
+    /// Flushes in one tank. The whole reason a session has a shape: without a
+    /// bound, nothing you do is a decision, because there is always another flush.
+    static let runLength = 20
+
+    /// Scrubbing runs clean water through, so it costs the tank the same as a flush.
+    /// This is what gives grime a price — a free wand makes neglect free.
+    static let wandCost = 1
+
     // MARK: - Gold
 
     /// One flush in this many is golden with a filthy bowl and no streak going.

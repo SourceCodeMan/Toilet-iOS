@@ -29,6 +29,14 @@ struct Fixture: Identifiable, Equatable, Sendable {
     /// plumbing; below that blocks easily, above that swallows nearly anything.
     let tolerance: Double
 
+    /// What a flush here is worth, as a multiplier.
+    ///
+    /// Deliberately the inverse of `tolerance`: the drain that swallows anything
+    /// pays the least, and the one that blocks if you look at it pays the most. That
+    /// is what turns the collection from a set of skins into a choice — without it
+    /// there is never a reason not to equip the most forgiving toilet you own.
+    let payout: Double
+
     /// SF Symbol for the picker chip.
     let symbol: String
 
@@ -59,6 +67,7 @@ struct Fixture: Identifiable, Equatable, Sendable {
         blurb: "The one you already have.",
         unlockAt: 0,
         tolerance: 1.0,
+        payout: 1.00,        // The bar everything else is measured against.
         symbol: "house.fill",
         surface: .tile,
         profile: .standard,
@@ -72,6 +81,7 @@ struct Fixture: Identifiable, Equatable, Sendable {
         blurb: "No plumbing. Just gravity and hope.",
         unlockAt: 25,
         tolerance: 0.55,
+        payout: 1.60,        // Blocks constantly, so it has to pay for the trouble.
         symbol: "tree.fill",
         surface: .planks,
         profile: FlushProfile(
@@ -101,6 +111,7 @@ struct Fixture: Identifiable, Equatable, Sendable {
         blurb: "A high cistern, and no hurry whatsoever.",
         unlockAt: 100,
         tolerance: 0.8,
+        payout: 1.25,        // Fussy enough to be worth something.
         symbol: "crown.fill",
         surface: .ornate,
         profile: FlushProfile(
@@ -130,6 +141,7 @@ struct Fixture: Identifiable, Equatable, Sendable {
         blurb: "Commercial grade. Startles everyone.",
         unlockAt: 400,
         tolerance: 1.9,
+        payout: 0.70,        // Swallows nearly anything, so it pays the least.
         symbol: "bolt.fill",
         surface: .panels,
         profile: FlushProfile(
@@ -159,6 +171,7 @@ struct Fixture: Identifiable, Equatable, Sendable {
         blurb: "In space, everyone can hear it.",
         unlockAt: 1_000,
         tolerance: 1.45,
+        payout: 0.85,        // Forgiving, and priced like it.
         symbol: "moon.stars.fill",
         surface: .bulkhead,
         profile: FlushProfile(
