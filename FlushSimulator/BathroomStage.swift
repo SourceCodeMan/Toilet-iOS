@@ -17,6 +17,9 @@ struct BathroomStage: View {
 
     static let designSize = CGSize(width: 470, height: 470)
 
+    /// Named so the plunger can measure its drag against something that holds still.
+    static let space = "bathroom-stage" 
+
     /// Where the toilet's own 320-wide canvas begins inside this one.
     private static let toiletX = (designSize.width - ToiletView.designSize.width) / 2
 
@@ -57,10 +60,15 @@ struct BathroomStage: View {
                     bowl: Self.bowl,
                     home: Self.plungerHome,
                     offset: $plungerOffset,
+                    space: Self.space,
                     onPump: { engine.plunge() })
                 .position(x: Self.plungerHome.x + plungerOffset.width,
                           y: Self.plungerHome.y + plungerOffset.height)
         }
         .frame(width: Self.designSize.width, height: Self.designSize.height, alignment: .topLeading)
+        // The plunger measures its drag against this. It must NOT use the gesture's
+        // default `.local` space: the plunger moves with the finger, so its own space
+        // moves too, translation stays near zero, and it never goes anywhere.
+        .coordinateSpace(.named(Self.space))
     }
 }

@@ -140,6 +140,9 @@ struct Standings: Codable, Equatable {
             let date = Date(timeIntervalSinceReferenceDate: Double(stamp) * 86_400)
             let f = DateFormatter()
             f.dateFormat = "d MMM"
+            // A stamp reconstructs to midnight UTC, so it has to be read back in UTC.
+            // Formatting it locally shows the day before anywhere west of Greenwich.
+            f.timeZone = TimeZone(secondsFromGMT: 0)
             return f.string(from: date)
         }
     }
