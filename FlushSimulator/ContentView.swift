@@ -111,10 +111,10 @@ struct ContentView: View {
     }
 
     private var upkeepBar: some View {
-        UpkeepBar(paper: $engine.paper,
-                  grime: engine.grime,
+        UpkeepBar(grime: engine.grime,
                   isFlushing: engine.isFlushing,
                   isClogged: engine.isClogged,
+                  isPaperTrailing: engine.isPaperTrailing,
                   plunges: engine.plunges,
                   palette: palette,
                   onWand: { engine.useWand() },
@@ -123,13 +123,9 @@ struct ContentView: View {
 
     private var stage: some View {
         GeometryReader { geometry in
-            let scale = min(geometry.size.width / ToiletView.designSize.width,
-                            geometry.size.height / ToiletView.designSize.height)
-            ToiletView(flushStart: engine.flushStart,
-                       palette: palette,
-                       profile: engine.activeProfile,
-                       grime: engine.grime,
-                       onPull: { engine.pullHandle($0) })
+            let scale = min(geometry.size.width / BathroomStage.designSize.width,
+                            geometry.size.height / BathroomStage.designSize.height)
+            BathroomStage(engine: engine, palette: palette)
                 .scaleEffect(scale)
                 .frame(width: geometry.size.width, height: geometry.size.height)
         }

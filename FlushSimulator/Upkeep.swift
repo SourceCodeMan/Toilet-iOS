@@ -35,6 +35,11 @@ enum Upkeep {
     /// Where the app starts you.
     static let defaultPaper = 2
 
+    /// What an uncut sheet counts as. The bowl keeps drawing off the roll for the
+    /// whole flush, so it is far past anything you could have hung there on purpose
+    /// — which is the point: forgetting to tear is not a small mistake.
+    static let runawayPaper = 12
+
     /// Score multiplier for a flush, by squares used.
     ///
     /// Rises fast then flattens, so there is a real reason to push past two and a

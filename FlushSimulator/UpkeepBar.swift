@@ -1,109 +1,63 @@
 import SwiftUI
 
-/// Paper going in, filth coming out — and the plunger, when it all goes wrong.
+/// The wand, and a word about what the bowl needs.
 ///
-/// One strip that swaps its whole contents while the bowl is blocked, because when
-/// it is blocked there is exactly one thing worth doing.
+/// Paper and the plunger used to live here as a stepper and a big red button. Both
+/// are objects in the room now — see `PaperRoll` and `Plunger` — so what is left is
+/// the wand, and a line telling you which step of a blockage you are on. Without
+/// that line a blocked bowl offers no clue that the plunger on the floor is the
+/// answer.
 struct UpkeepBar: View {
 
-    @Binding var paper: Int
     var grime: Double
     var isFlushing: Bool
     var isClogged: Bool
+    var isPaperTrailing: Bool
     var plunges: Int
     var palette: Palette
     var onWand: () -> Void
     var onPlunge: () -> Void
 
     var body: some View {
-        Group {
-            if isClogged { plunger } else { normal }
-        }
-        .frame(height: 40)
-        .animation(.snappy, value: isClogged)
-    }
-
-    // MARK: - Blocked
-
-    private var plunger: some View {
-        Button(action: onPlunge) {
-            HStack(spacing: 9) {
-                Image(systemName: "arrow.down.circle.fill")
-                    .font(.system(size: 15, weight: .bold))
-                Text("PLUNGE")
-                    .font(.system(size: 14, weight: .heavy, design: .rounded))
-                    .kerning(0.5)
-
-                HStack(spacing: 4) {
-                    ForEach(0..<Upkeep.plungesToClear, id: \.self) { i in
-                        Circle()
-                            .fill(i < plunges ? Color.white : Color.white.opacity(0.32))
-                            .frame(width: 7, height: 7)
-                    }
-                }
-            }
-            .foregroundStyle(.white)
-            .frame(maxWidth: .infinity)
-            .frame(height: 40)
-            .background(
-                Capsule(style: .continuous)
-                    .fill(Color(red: 0.86, green: 0.34, blue: 0.24))
-            )
-        }
-        .buttonStyle(.plain)
-        .accessibilityLabel("Plunge")
-        .accessibilityValue("\(plunges) of \(Upkeep.plungesToClear)")
-    }
-
-    // MARK: - Business as usual
-
-    private var normal: some View {
         HStack(spacing: 10) {
-            paperPicker
+            if isClogged { instruction } else { Spacer(minLength: 4) }
             Spacer(minLength: 4)
             wand
         }
+        .frame(height: 40)
+        .animation(.snappy, value: isClogged)
+        .animation(.snappy, value: isPaperTrailing)
     }
 
-    private var paperPicker: some View {
-        HStack(spacing: 8) {
-            Button { step(-1) } label: { pill("minus") }
-                .buttonStyle(.plain)
-                .disabled(paper <= Upkeep.paperRange.lowerBound)
-
-            VStack(spacing: 1) {
-                Text("\(paper)")
-                    .font(.system(size: 15, weight: .heavy, design: .rounded))
-                    .monospacedDigit()
-                Text(paper == 1 ? "SQUARE" : "SQUARES")
-                    .font(.system(size: 8, weight: .bold, design: .rounded))
-                    .opacity(0.55)
-            }
-            .foregroundStyle(palette.ink)
-            .frame(width: 58)
-
-            Button { step(1) } label: { pill("plus") }
-                .buttonStyle(.plain)
-                .disabled(paper >= Upkeep.paperRange.upperBound)
+    /// What to do next, in the order it has to happen.
+    ///
+    /// Also tappable as a pump. The plunger on the floor is the intended way to clear
+    /// a blockage, but until its drag is reliable this is the guaranteed path — a
+    /// blocked bowl with no working way out is a dead end, not a difficulty spike.
+    private var instruction: some View {
+        Button(action: { if !isPaperTrailing { onPlunge() } }) {
+            instructionLabel
         }
-        .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Toilet paper")
-        .accessibilityValue("\(paper) squares. ×\(String(format: "%.1f", Upkeep.multiplier(forPaper: paper))) score.")
-        .accessibilityAdjustableAction { step($0 == .increment ? 1 : -1) }
+        .buttonStyle(.plain)
+        .disabled(isPaperTrailing)
     }
 
-    private func pill(_ symbol: String) -> some View {
-        Image(systemName: symbol)
-            .font(.system(size: 12, weight: .bold))
-            .foregroundStyle(palette.ink.opacity(0.75))
-            .frame(width: 32, height: 32)
-            .background(Circle().fill(palette.ink.opacity(0.09)))
-    }
-
-    private func step(_ by: Int) {
-        let next = paper + by
-        guard Upkeep.paperRange.contains(next) else { return }
-        withAnimation(.snappy) { paper = next }
+    private var instructionLabel: some View {
+        HStack(spacing: 7) {
+            Image(systemName: isPaperTrailing ? "scissors" : "arrow.down.circle.fill")
+                .font(.system(size: 13, weight: .bold))
+            Text(isPaperTrailing
+                 ? "Swipe across the paper to cut it free"
+                 : "Plunge it · \(plunges)/\(Upkeep.plungesToClear)")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .foregroundStyle(.white)
+        .padding(.horizontal, 13)
+        .frame(height: 36)
+        .background(Capsule(style: .continuous).fill(Color(red: 0.86, green: 0.34, blue: 0.24)))
+        .accessibilityElement(children: .combine)
     }
 
     /// The wand, with how filthy the bowl is drawn straight into it.

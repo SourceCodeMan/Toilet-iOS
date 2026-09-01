@@ -37,6 +37,19 @@ enum Quips {
         "You cannot rush a classic."
     ]
 
+    /// For a flush with nothing in it. There is no delicate way to raise this.
+    private static let unwiped = [
+        "You didn't wipe. We both know it.",
+        "Flushed. Unwiped. Bold strategy.",
+        "Nothing in, nothing out. Suspicious.",
+        "A courtesy flush at best.",
+        "No paper? Brave. Grim, but brave.",
+        "You are simply flushing water now.",
+        "The roll is RIGHT THERE.",
+        "Somewhere, a plumber winced.",
+        "That's between you and the porcelain."
+    ]
+
     private static let golden = [
         "A GOLDEN FLUSH. Tell someone.",
         "GOLDEN FLUSH. The rarest swirl.",
@@ -51,6 +64,7 @@ enum Quips {
     @MainActor static func afterFlushLine() -> String { pick(from: afterFlush) }
     @MainActor static func busyLine() -> String { pick(from: whileBusy) }
     @MainActor static func goldenLine() -> String { pick(from: golden) }
+    @MainActor static func unwipedLine() -> String { pick(from: unwiped) }
 
     /// A line for round numbers, because round numbers deserve acknowledgement.
     static func milestone(for count: Int) -> String? {

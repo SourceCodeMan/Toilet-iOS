@@ -36,13 +36,34 @@ final class FlushEngine: ObservableObject {
     /// How filthy the bowl is, 0...1.
     @Published private(set) var grime: Double
 
-    /// Squares going in on the next flush.
-    @Published var paper: Int {
-        didSet { defaults.set(paper, forKey: Key.paper) }
+    // MARK: - The roll on the wall
+
+    /// Squares hanging off the roll, pulled but not yet torn.
+    @Published private(set) var paperPulled = 0
+
+    /// True once the sheet has been torn off and is sitting ready.
+    @Published private(set) var isPaperCut = false
+
+    /// The sheet was never torn, so the flush dragged the roll in with it. Nothing
+    /// clears until it is cut free.
+    @Published private(set) var isPaperTrailing = false
+
+    /// What actually goes down on this flush.
+    ///
+    /// An uncut sheet does not go down as a tidy stack: the bowl keeps pulling for
+    /// the whole flush, so it counts as far more than was ever hanging there. Pulling
+    /// nothing at all is not the same thing as leaving it attached, though — an empty
+    /// roll is uncut by definition, and that must not read as a runaway.
+    var loadedPaper: Int {
+        guard paperPulled > 0 else { return 0 }
+        return isPaperCut ? paperPulled : Upkeep.runawayPaper
     }
 
     /// True while the bowl is blocked. Nothing flushes until it is cleared.
     @Published private(set) var isClogged = false
+
+    /// Whether the blockage was a whole roll rather than an ordinary overload.
+    private var wasRunaway = false
 
     /// Pumps landed on the current blockage.
     @Published private(set) var plunges = 0
@@ -75,7 +96,6 @@ final class FlushEngine: ObservableObject {
         static let fixture = "equippedFixture"
         static let bestStreak = "bestStreak"
         static let grime = "grime"
-        static let paper = "paper"
     }
 
     private let defaults: UserDefaults
@@ -94,7 +114,6 @@ final class FlushEngine: ObservableObject {
         goldenFlushes = defaults.integer(forKey: Key.golden)
         bestStreak = defaults.integer(forKey: Key.bestStreak)
         grime = min(max(defaults.double(forKey: Key.grime), 0), 1)
-        paper = defaults.object(forKey: Key.paper) as? Int ?? Upkeep.defaultPaper
         standings = Standings.load(from: defaults)
 
         // Fall back to the standard toilet if the saved one is unknown, or if the
@@ -203,11 +222,13 @@ final class FlushEngine: ObservableObject {
         defaults.set(0, forKey: Key.bestStreak)
         isClogged = false
         plunges = 0
+        paperPulled = 0
+        isPaperCut = false
+        isPaperTrailing = false
+        wasRunaway = false
         standings = Standings()
         Standings.clear(in: defaults)
         setGrime(0)
-        paper = Upkeep.defaultPaper
-        defaults.set(Upkeep.defaultPaper, forKey: Key.paper)
         // The standard toilet is the only one left standing after a wipe.
         fixture = .standard
         defaults.set(Fixture.standard.id, forKey: Key.fixture)
@@ -230,9 +251,45 @@ final class FlushEngine: ObservableObject {
                      kind: .unlock))
     }
 
+    // MARK: - The roll
+
+    /// Draw the sheet down. Called continuously while a finger drags it.
+    func pullPaper(to squares: Int) {
+        guard !isFlushing, !isClogged, !isPaperCut else { return }
+        let wanted = min(max(squares, 0), Upkeep.paperRange.upperBound)
+        guard wanted != paperPulled else { return }
+        paperPulled = wanted
+        Haptics.shared.tick()
+    }
+
+    /// Tear it off. Until this happens the sheet is still attached to the roll.
+    func cutPaper() {
+        guard paperPulled > 0 else { return }
+
+        // Cutting a sheet that a flush already dragged in is the first step out of
+        // the blockage, not a normal tear.
+        if isPaperTrailing {
+            isPaperTrailing = false
+            paperPulled = 0
+            isPaperCut = false
+            Haptics.shared.thud()
+            show(Message(text: "Cut free. Now plunge it.", kind: .busy))
+            return
+        }
+
+        guard !isPaperCut else { return }
+        isPaperCut = true
+        Haptics.shared.tick()
+    }
+
     /// One pump. Five clears it.
     func plunge() {
         guard isClogged else { return }
+        guard !isPaperTrailing else {
+            Haptics.shared.thud()
+            show(Message(text: "It's still attached. Cut it.", kind: .busy))
+            return
+        }
         plunges += 1
         Haptics.shared.thud()
 
@@ -243,8 +300,10 @@ final class FlushEngine: ObservableObject {
 
         isClogged = false
         plunges = 0
-        // Clearing a blockage churns the filth up rather than removing it.
-        setGrime(min(grime + 0.08, 1))
+        // Clearing a blockage churns the filth up rather than removing it. A whole
+        // roll going down leaves the bowl in a state the wand is the only answer to.
+        setGrime(wasRunaway ? max(grime, Upkeep.filthyAbove + 0.02) : min(grime + 0.08, 1))
+        wasRunaway = false
         show(Message(text: "Cleared. Try using less next time.", kind: .milestone))
     }
 
@@ -271,27 +330,38 @@ final class FlushEngine: ObservableObject {
             celebrate()
         }
 
+        // A sheet still attached to the roll is not a quantity, it is an accident.
+        let runaway = paperPulled > 0 && !isPaperCut
+        let load = loadedPaper
+
         standings.record(golden: isGolden,
                          streak: streak,
-                         points: Upkeep.points(paper: paper, golden: isGolden))
+                         points: runaway ? 0 : Upkeep.points(paper: load, golden: isGolden))
         standings.save(to: defaults)
 
         // Every flush leaves a little behind, and paper leaves more.
-        setGrime(grime + Upkeep.grimePerFlush * (1 + Double(paper) * 0.25))
+        setGrime(grime + Upkeep.grimePerFlush * (1 + Double(load) * 0.25))
 
-        // Then find out whether it went down at all.
-        let odds = Upkeep.clogChance(paper: paper,
+        // Then find out whether it went down at all. A runaway roll is not a roll of
+        // the dice — it blocks, every time.
+        let odds = Upkeep.clogChance(paper: load,
                                      grime: grime,
                                      grade: grade,
                                      tolerance: fixture.tolerance)
-        if Double.random(in: 0..<1) < odds {
+        if runaway || Double.random(in: 0..<1) < odds {
             isClogged = true
+            wasRunaway = runaway
+            isPaperTrailing = runaway
             plunges = 0
             streak = 0
             Haptics.shared.thud()
-            show(Message(text: "Clogged.", kind: .busy))
+            show(Message(text: runaway ? "The whole roll went in." : "Clogged.", kind: .busy))
             return
         }
+
+        // A tidy flush takes the sheet with it and leaves the roll ready again.
+        paperPulled = 0
+        isPaperCut = false
 
         // Earning a new toilet outranks anything else the app had to say. The gold
         // still happens on screen, it just does not get the line.
@@ -299,6 +369,9 @@ final class FlushEngine: ObservableObject {
             show(Message(text: "Unlocked — \(earned.name)", kind: .unlock))
         } else if isGolden {
             show(Message(text: Quips.goldenLine(), kind: .golden))
+        } else if load == 0 {
+            // Flushing nothing but water is its own kind of achievement.
+            show(Message(text: Quips.unwipedLine(), kind: .busy))
         } else if grade == .perfect, streak >= 2 {
             show(Message(text: "Perfect ×\(streak)", kind: .milestone))
         } else if grade == .weak || grade == .overheld {
