@@ -101,8 +101,14 @@ struct LeaderboardView: View {
                       "Sign in from Settings → Game Center to appear on the global board.")
 
             case .notConfigured:
+                // Reaching here means GameKit answered and had no such board. The app
+                // asks for GlobalBoard.ID.lifetime; until a leaderboard with exactly
+                // that ID exists in App Store Connect, this is the honest state.
+                // Deliberately says nothing about memberships or consoles: a player
+                // cannot act on either, and the old copy blamed a membership that is
+                // no longer missing.
                 empty("The global board isn't live yet.",
-                      "It needs a leaderboard created in App Store Connect, which needs the paid membership. Your days are still being recorded.")
+                      "Nothing to do at your end. Your days are still being recorded right here.")
 
             case .failed(let why):
                 empty("Game Center didn't answer.", why)
