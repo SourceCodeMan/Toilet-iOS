@@ -71,6 +71,21 @@ final class FlushEngine: ObservableObject {
     /// Day-by-day record, for the leaderboard.
     @Published private(set) var standings: Standings
 
+    // MARK: - The daily
+
+    /// Today's puzzle. Derived from the date, so it needs no network.
+    let challenge = DailyChallenge.today()
+
+    /// Your attempt at it, or nil if you have not started today.
+    @Published private(set) var daily: DailyResult?
+
+    /// What the bowl looked like before the daily took it over.
+    private var fixtureBeforeDaily: Fixture?
+    private var grimeBeforeDaily: Double?
+
+    var isDailyRunning: Bool { daily.map { !$0.isComplete } ?? false }
+    var isDailyDone: Bool { daily?.isComplete ?? false }
+
     /// The profile actually driving the flush on screen: the fixture's, scaled by
     /// how well the handle was pulled.
     var activeProfile: FlushProfile { grade.apply(to: fixture.profile) }
@@ -115,6 +130,7 @@ final class FlushEngine: ObservableObject {
         bestStreak = defaults.integer(forKey: Key.bestStreak)
         grime = min(max(defaults.double(forKey: Key.grime), 0), 1)
         standings = Standings.load(from: defaults)
+        daily = DailyResult.load(from: defaults)
 
         // Fall back to the standard toilet if the saved one is unknown, or if the
         // tally was wiped and it is no longer earned. Reads the local rather than
@@ -151,6 +167,11 @@ final class FlushEngine: ObservableObject {
     // MARK: - The button
 
     func pullHandle(_ pulled: FlushGrade = .good) {
+        guard !isDailyDone || fixtureBeforeDaily == nil else {
+            Haptics.shared.thud()
+            show(Message(text: "Today's daily is done. Come back tomorrow.", kind: .busy))
+            return
+        }
         guard !isClogged else {
             Haptics.shared.thud()
             show(Message(text: "Blocked. Plunge it.", kind: .busy))
@@ -228,6 +249,10 @@ final class FlushEngine: ObservableObject {
         wasRunaway = false
         standings = Standings()
         Standings.clear(in: defaults)
+        daily = nil
+        fixtureBeforeDaily = nil
+        grimeBeforeDaily = nil
+        DailyResult.clear(in: defaults)
         setGrime(0)
         // The standard toilet is the only one left standing after a wipe.
         fixture = .standard
@@ -235,6 +260,70 @@ final class FlushEngine: ObservableObject {
         defaults.set(0, forKey: Key.total)
         defaults.set(0, forKey: Key.golden)
         show(Message(text: "A clean slate. Literally.", kind: .quip))
+    }
+
+    // MARK: - The daily
+
+    /// Take today's puzzle. Sets the bowl up the way the date says, and remembers
+    /// what was there so ordinary play gets it back afterwards.
+    func startDaily() {
+        guard !isDailyRunning, !isDailyDone, !isFlushing, !isClogged else { return }
+
+        fixtureBeforeDaily = fixture
+        grimeBeforeDaily = grime
+
+        daily = DailyResult(stamp: challenge.stamp)
+        withAnimation(.snappy) { fixture = challenge.fixture }
+        setGrime(challenge.startingGrime)
+        paperPulled = 0
+        isPaperCut = false
+        isPaperTrailing = false
+        streak = 0
+
+        FlushAudio.shared.prepare(challenge.fixture.profile)
+        show(Message(text: "Daily #\(challenge.number) — \(challenge.paperTarget) squares", kind: .unlock))
+    }
+
+    /// Give the bowl back to ordinary play.
+    func endDaily() {
+        guard daily != nil else { return }
+        if let was = fixtureBeforeDaily { withAnimation(.snappy) { fixture = was } }
+        if let was = grimeBeforeDaily { setGrime(was) }
+        fixtureBeforeDaily = nil
+        grimeBeforeDaily = nil
+        paperPulled = 0
+        isPaperCut = false
+        isPaperTrailing = false
+        isClogged = false
+        plunges = 0
+        // A finished attempt is kept so today stays finished; an abandoned one is not.
+        if daily?.isComplete == false { daily = nil }
+    }
+
+    private func recordDaily(blocked: Bool, load: Int) {
+        guard var run = daily else { return }
+
+        let mark: DailyMark
+        if blocked            { mark = .clogged }
+        else if isGolden      { mark = .golden }
+        else if grade == .perfect { mark = .perfect }
+        else if grade == .good    { mark = .good }
+        else                  { mark = .poor }
+        run.marks.append(mark)
+
+        if !blocked {
+            // Hitting the day's paper target exactly is the whole puzzle.
+            let base = Double(Upkeep.points(paper: load, golden: isGolden))
+            let onTarget = load == challenge.paperTarget
+            run.score += Int((base * (onTarget ? DailyChallenge.targetBonus : 1)).rounded())
+        }
+
+        daily = run
+        run.save(to: defaults)
+
+        if run.isComplete {
+            show(Message(text: "Daily done — \(run.score.formatted()) points", kind: .milestone))
+        }
     }
 
     // MARK: - Upkeep
@@ -334,21 +423,27 @@ final class FlushEngine: ObservableObject {
         let runaway = paperPulled > 0 && !isPaperCut
         let load = loadedPaper
 
-        standings.record(golden: isGolden,
-                         streak: streak,
-                         points: runaway ? 0 : Upkeep.points(paper: load, golden: isGolden))
-        standings.save(to: defaults)
-
         // Every flush leaves a little behind, and paper leaves more.
         setGrime(grime + Upkeep.grimePerFlush * (1 + Double(load) * 0.25))
 
-        // Then find out whether it went down at all. A runaway roll is not a roll of
-        // the dice — it blocks, every time.
+        // Settle whether it went down before recording, so the daily can mark a
+        // blocked flush as blocked. A runaway roll is not a roll of the dice.
         let odds = Upkeep.clogChance(paper: load,
                                      grime: grime,
                                      grade: grade,
                                      tolerance: fixture.tolerance)
-        if runaway || Double.random(in: 0..<1) < odds {
+        let blocked = runaway || Double.random(in: 0..<1) < odds
+
+        if isDailyRunning {
+            recordDaily(blocked: blocked, load: load)
+        } else {
+            standings.record(golden: isGolden,
+                             streak: streak,
+                             points: runaway ? 0 : Upkeep.points(paper: load, golden: isGolden))
+            standings.save(to: defaults)
+        }
+
+        if blocked {
             isClogged = true
             wasRunaway = runaway
             isPaperTrailing = runaway

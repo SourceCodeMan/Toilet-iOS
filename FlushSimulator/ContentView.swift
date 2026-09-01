@@ -7,6 +7,7 @@ struct ContentView: View {
     @State private var isMuted = FlushAudio.shared.isMuted
     @State private var isConfirmingReset = false
     @State private var isShowingBoard = false
+    @State private var isShowingDaily = false
     @State private var hintPulse = false
 
     private var palette: Palette {
@@ -43,6 +44,9 @@ struct ContentView: View {
             }
         }
         .animation(.easeInOut(duration: 0.45), value: engine.showsGold)
+        .sheet(isPresented: $isShowingDaily) {
+            DailyView(engine: engine, palette: palette)
+        }
         .sheet(isPresented: $isShowingBoard) {
             LeaderboardView(standings: engine.standings,
                             lifetime: engine.totalFlushes,
@@ -78,6 +82,16 @@ struct ContentView: View {
                     .opacity(0.65)
             }
             Spacer(minLength: 8)
+            Button {
+                isShowingDaily = true
+            } label: {
+                Image(systemName: engine.isDailyDone ? "checkmark.seal.fill" : "calendar")
+                    .font(.system(size: 15, weight: .semibold))
+                    .frame(width: 38, height: 38)
+                    .background(Circle().fill(palette.porcelainLight.opacity(0.55)))
+            }
+            .accessibilityLabel("Daily flush")
+
             Button {
                 isShowingBoard = true
             } label: {
@@ -181,6 +195,15 @@ struct ContentView: View {
         .accessibilityHint("Press and hold to reset your stats")
     }
 
+    /// While a daily is running the hint's job is to say where you are in it.
+    private var hintText: String {
+        if let run = engine.daily, !run.isComplete {
+            return "Daily #\(engine.challenge.number) · \(run.marks.count)/\(DailyChallenge.flushCount) · \(engine.challenge.paperTarget) squares"
+        }
+        if engine.totalFlushes == 0 { return "Hold the handle" }
+        return "Hold, then let go in the window"
+    }
+
     private func stat(title: String, value: String) -> some View {
         VStack(spacing: 2) {
             Text(value)
@@ -198,7 +221,7 @@ struct ContentView: View {
     private var hint: some View {
         // A tap grades as a half flush, so the hint has to say hold or it is
         // teaching the one pull that breaks your streak.
-        Text(engine.totalFlushes == 0 ? "Hold the handle" : "Hold, then let go in the window")
+        Text(hintText)
             .font(.system(size: 12, weight: .semibold, design: .rounded))
             .foregroundStyle(palette.ink)
             .opacity(hintPulse ? 0.75 : 0.3)
