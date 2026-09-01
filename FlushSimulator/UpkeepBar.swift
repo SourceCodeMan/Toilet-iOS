@@ -16,7 +16,6 @@ struct UpkeepBar: View {
     var plunges: Int
     var palette: Palette
     var onWand: () -> Void
-    var onPlunge: () -> Void
 
     var body: some View {
         HStack(spacing: 10) {
@@ -31,24 +30,16 @@ struct UpkeepBar: View {
 
     /// What to do next, in the order it has to happen.
     ///
-    /// Also tappable as a pump. The plunger on the floor is the intended way to clear
-    /// a blockage, but until its drag is reliable this is the guaranteed path — a
-    /// blocked bowl with no working way out is a dead end, not a difficulty spike.
+    /// Only a sign now. It briefly doubled as a pump button while the plunger's drag
+    /// was unproven, which was a stopgap rather than a design — the plunger on the
+    /// floor is the way to clear a blockage.
     private var instruction: some View {
-        Button(action: { if !isPaperTrailing { onPlunge() } }) {
-            instructionLabel
-        }
-        .buttonStyle(.plain)
-        .disabled(isPaperTrailing)
-    }
-
-    private var instructionLabel: some View {
         HStack(spacing: 7) {
             Image(systemName: isPaperTrailing ? "scissors" : "arrow.down.circle.fill")
                 .font(.system(size: 13, weight: .bold))
             Text(isPaperTrailing
                  ? "Swipe across the paper to cut it free"
-                 : "Plunge it · \(plunges)/\(Upkeep.plungesToClear)")
+                 : "Drag the plunger over the bowl · \(plunges)/\(Upkeep.plungesToClear)")
                 .font(.system(size: 12, weight: .bold, design: .rounded))
                 .lineLimit(1)
                 .minimumScaleFactor(0.8)

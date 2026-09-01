@@ -166,8 +166,7 @@ struct ContentView: View {
                   isPaperTrailing: engine.isPaperTrailing,
                   plunges: engine.plunges,
                   palette: palette,
-                  onWand: { engine.useWand() },
-                  onPlunge: { engine.plunge() })
+                  onWand: { engine.useWand() })
     }
 
     private var stage: some View {
