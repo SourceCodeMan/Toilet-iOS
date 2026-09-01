@@ -13,6 +13,8 @@ struct PaperRoll: View {
     var isCut: Bool
     /// A flush dragged the roll in and it is still attached.
     var isTrailing: Bool
+    /// This one came off as hundreds. One roll in a hundred does.
+    var isCash: Bool = false
     var palette: Palette
 
     var onPull: (Int) -> Void
@@ -30,6 +32,10 @@ struct PaperRoll: View {
     @State private var tornThisDrag = false
 
     private var hanging: Int { isCut ? 0 : pulled }
+
+    /// The green of a bill, rather than the white of a sheet.
+    private var billFace: Color { Color(red: 0.42, green: 0.60, blue: 0.44) }
+    private var billInk: Color { Color(red: 0.16, green: 0.31, blue: 0.20) }
     private var sheetLength: CGFloat { CGFloat(hanging) * square }
 
     var body: some View {
@@ -52,6 +58,7 @@ struct PaperRoll: View {
     }
 
     private var accessibilityState: String {
+        if isCash { return "\(hanging) hundred dollar bills hanging. Flush them." }
         if isTrailing { return "Caught in the bowl. Tear it free." }
         if isCut { return "\(pulled) squares torn off and ready" }
         return hanging == 0 ? "Nothing pulled yet" : "\(hanging) squares hanging, not torn"
@@ -89,17 +96,36 @@ struct PaperRoll: View {
     private var sheet: some View {
         ZStack(alignment: .top) {
             RoundedRectangle(cornerRadius: 3, style: .continuous)
-                .fill(LinearGradient(colors: [.white, palette.porcelainMid],
-                                     startPoint: .leading, endPoint: .trailing))
+                .fill(isCash
+                      ? LinearGradient(colors: [billFace.opacity(0.95), billFace],
+                                       startPoint: .leading, endPoint: .trailing)
+                      : LinearGradient(colors: [.white, palette.porcelainMid],
+                                       startPoint: .leading, endPoint: .trailing))
                 .frame(width: sheetWidth, height: sheetLength)
                 .shadow(color: palette.porcelainShadow.opacity(0.22), radius: 3, x: 1, y: 2)
 
             // Perforations, so the number of squares is countable at a glance.
             ForEach(1..<max(hanging, 1), id: \.self) { i in
                 Rectangle()
-                    .fill(palette.porcelainShadow.opacity(0.30))
+                    .fill(isCash ? billInk.opacity(0.55) : palette.porcelainShadow.opacity(0.30))
                     .frame(width: sheetWidth - 8, height: 1)
                     .offset(y: CGFloat(i) * square)
+            }
+
+            // A hundred on every square, so what is hanging there is unmistakable.
+            if isCash {
+                ForEach(0..<max(hanging, 1), id: \.self) { i in
+                    Text("100")
+                        .font(.system(size: 11, weight: .black, design: .serif))
+                        .foregroundStyle(billInk)
+                        .frame(width: sheetWidth - 10, height: square)
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 2)
+                                .strokeBorder(billInk.opacity(0.35), lineWidth: 0.8)
+                                .padding(2)
+                        )
+                        .offset(y: CGFloat(i) * square)
+                }
             }
 
             // A torn bottom edge while it is still attached, so "not cut" reads.

@@ -69,6 +69,19 @@ enum Upkeep {
         return Int((golden ? base * goldenBonus : base).rounded())
     }
 
+    // MARK: - The lucky roll
+
+    /// One roll in this many comes off the wall as hundreds instead of paper.
+    ///
+    /// Benjamin's idea, and a good one: the roll is the thing you touch before every
+    /// single flush, so it is exactly where a rare surprise pays off. Rolled once per
+    /// sheet rather than per pull, or you could just yo-yo the roll until it hit.
+    static let cashOdds = 100
+
+    /// What flushing money is worth. Absurd on purpose — this should be the best
+    /// thing that happens to you all week.
+    static let cashMultiplier = 10.0
+
     // MARK: - The tank
 
     /// Flushes in one tank. The whole reason a session has a shape: without a

@@ -48,6 +48,7 @@ struct BathroomStage: View {
             PaperRoll(pulled: engine.paperPulled,
                       isCut: engine.isPaperCut,
                       isTrailing: engine.isPaperTrailing,
+                      isCash: engine.isCashRoll,
                       palette: palette,
                       onPull: { engine.pullPaper(to: $0) },
                       onCut: { engine.cutPaper() })
