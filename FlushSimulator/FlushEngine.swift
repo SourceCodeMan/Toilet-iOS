@@ -95,6 +95,9 @@ final class FlushEngine: ObservableObject {
     /// True once the tank is dry and the score is final.
     @Published private(set) var isRunOver = false
 
+    /// What the last blockage actually took off the score, for the message.
+    @Published private(set) var lastClogCost = 0
+
     /// Bumped every time something asks for water that is not there.
     ///
     /// The summary used to be the only route to a new tank, so dismissing it left the
@@ -327,9 +330,19 @@ final class FlushEngine: ObservableObject {
     /// Take one flush off the tank and bank what it was worth.
     private func spendFromTank(blocked: Bool, load: Int, cash: Bool) {
         flushesLeft = max(flushesLeft - 1, 0)
-        if !blocked {
-            let base = Double(Upkeep.points(paper: load, golden: isGolden))
-            runScore += Int((base * fixture.payout * (cash ? Upkeep.cashMultiplier : 1)).rounded())
+
+        let worth = Int((Double(Upkeep.points(paper: load, golden: isGolden))
+                         * fixture.payout
+                         * (cash ? Upkeep.cashMultiplier : 1)).rounded())
+        if blocked {
+            // A block costs what the flush would have paid. That scales with what you
+            // put in, so it is greed being punished rather than luck — and it lands on
+            // the score, which the bowl controls, instead of the streak, which the
+            // handle earned.
+            lastClogCost = min(worth, runScore)
+            runScore = max(runScore - worth, 0)
+        } else {
+            runScore += worth
         }
         if flushesLeft == 0 {
             isRunOver = true
@@ -568,9 +581,13 @@ final class FlushEngine: ObservableObject {
             // Only a runaway is still attached, and that is what has to be cut free.
             if !runaway { resetRoll() }
             plunges = 0
-            streak = 0
+            // The streak deliberately survives. It is earned pull by pull at the
+            // handle, and a block is partly the dice — taking fifteen perfect pulls
+            // away for one unlucky flush read as a punishment for nothing.
             Haptics.shared.thud()
-            show(Message(text: runaway ? "The whole roll went in." : "Clogged.", kind: .busy))
+            let cost = lastClogCost > 0 ? " −\(lastClogCost.formatted())" : ""
+            show(Message(text: (runaway ? "The whole roll went in." : "Clogged.") + cost,
+                         kind: .busy))
             return
         }
 
