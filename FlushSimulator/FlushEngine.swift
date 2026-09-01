@@ -95,6 +95,13 @@ final class FlushEngine: ObservableObject {
     /// True once the tank is dry and the score is final.
     @Published private(set) var isRunOver = false
 
+    /// Bumped every time something asks for water that is not there.
+    ///
+    /// The summary used to be the only route to a new tank, so dismissing it left the
+    /// game with no legal move: dry, and no way to say so. This lets asking for a
+    /// flush bring the summary back instead of just refusing.
+    @Published private(set) var dryTankAsks = 0
+
     // MARK: - The daily
 
     /// Today's puzzle. Derived from the date, so it needs no network.
@@ -196,6 +203,7 @@ final class FlushEngine: ObservableObject {
         // A dry tank is the end of the run, not a soft nudge.
         guard isDailyRunning || flushesLeft > 0 else {
             Haptics.shared.thud()
+            dryTankAsks += 1
             show(Message(text: "Tank's dry. Start a new one.", kind: .busy))
             return
         }

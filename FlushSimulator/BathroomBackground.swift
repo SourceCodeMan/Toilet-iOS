@@ -15,6 +15,10 @@ struct BathroomBackground: View {
     var palette: Palette
     var surface: RoomSurface
 
+    /// Where the toilet's feet actually land, in this view's own space. Nil falls back
+    /// to `horizon`, which is only right if nothing above has been rescaled.
+    var floorY: CGFloat?
+
     /// Where the floor meets the wall, as a fraction of height.
     ///
     /// Tuned against the toilet's base rather than the middle of the screen. This
@@ -24,7 +28,10 @@ struct BathroomBackground: View {
 
     var body: some View {
         Canvas { context, size in
-            let y = size.height * horizon
+            // Measured beats tuned: a hand-picked fraction stops being the floor the
+            // moment anything above it changes scale.
+            let y = min(max(floorY ?? size.height * horizon, size.height * 0.25),
+                        size.height * 0.92)
             let wall = CGRect(x: 0, y: 0, width: size.width, height: y)
             let floor = CGRect(x: 0, y: y, width: size.width, height: size.height - y)
 

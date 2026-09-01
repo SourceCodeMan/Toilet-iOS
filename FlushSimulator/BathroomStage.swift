@@ -26,8 +26,13 @@ struct BathroomStage: View {
     /// The bowl, in stage coordinates. `ToiletView` draws its water at (160, 218).
     private static let bowl = CGPoint(x: toiletX + 160, y: 216)
 
-    /// Where the plunger leans when nothing is blocked.
-    private static let plungerHome = CGPoint(x: 410, y: 356)
+    /// Where the plunger leans when nothing is blocked. Its cup wants to land on the
+    /// same line the toilet stands on, which is `floorLine` below.
+    private static let plungerHome = CGPoint(x: 410, y: 346)
+
+    /// Where the toilet's foot meets the ground, in stage units. `ToiletView` draws
+    /// the foot as a 28-tall bar centred on 398, so it ends here.
+    static let floorLine: CGFloat = 412
 
     var body: some View {
         ZStack(alignment: .topLeading) {

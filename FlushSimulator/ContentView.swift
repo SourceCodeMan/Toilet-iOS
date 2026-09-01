@@ -9,6 +9,10 @@ struct ContentView: View {
     @State private var isShowingBoard = false
     @State private var isShowingDaily = false
     @State private var isShowingRunEnd = false
+
+    /// Where the toilet's feet land on screen, measured rather than guessed, so the
+    /// room's floor can be drawn to meet them.
+    @State private var floorY: CGFloat?
     @State private var hintPulse = false
 
     private var palette: Palette {
@@ -18,7 +22,9 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            BathroomBackground(palette: palette, surface: engine.fixture.surface)
+            BathroomBackground(palette: palette,
+                               surface: engine.fixture.surface,
+                               floorY: floorY)
                 .ignoresSafeArea()
 
             VStack(spacing: 10) {
@@ -56,6 +62,11 @@ struct ContentView: View {
         .onChange(of: engine.isRunOver) { _, over in
             if over { isShowingRunEnd = true }
         }
+        // Reaching for the handle on a dry tank brings the summary back, so putting
+        // it away by accident is not the end of the game.
+        .onChange(of: engine.dryTankAsks) { _, _ in
+            if engine.isRunOver { isShowingRunEnd = true }
+        }
         .sheet(isPresented: $isShowingRunEnd) {
             RunSummaryView(score: engine.runScore,
                            best: engine.bestRun,
@@ -64,6 +75,9 @@ struct ContentView: View {
                 engine.startRun()
                 isShowingRunEnd = false
             }
+            // There is no legal move behind this sheet: the tank is dry and only the
+            // button starts a new one. Swiping it away was a dead end.
+            .interactiveDismissDisabled()
         }
         .sheet(isPresented: $isShowingBoard) {
             LeaderboardView(standings: engine.standings,
@@ -163,8 +177,15 @@ struct ContentView: View {
             BathroomStage(engine: engine, palette: palette)
                 .scaleEffect(scale)
                 .frame(width: geometry.size.width, height: geometry.size.height)
+                // `scaleEffect` leaves the layout box at its design size and scales
+                // about its centre, so the foot lands this far from that centre.
+                .preference(key: FloorLineKey.self,
+                            value: geometry.frame(in: .global).minY
+                                 + geometry.size.height / 2
+                                 + (BathroomStage.floorLine - BathroomStage.designSize.height / 2) * scale)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .onPreferenceChange(FloorLineKey.self) { floorY = $0 }
     }
 
     private var statsCard: some View {
@@ -173,6 +194,8 @@ struct ContentView: View {
         return VStack(spacing: 11) {
             HStack(spacing: 0) {
                 stat(title: "TANK", value: "\(engine.flushesLeft)")
+                    .contentShape(Rectangle())
+                    .onTapGesture { if engine.isRunOver { isShowingRunEnd = true } }
                 Divider().frame(height: 32)
                 stat(title: "RUN SCORE", value: engine.runScore.formatted())
                 Divider().frame(height: 32)
@@ -246,6 +269,18 @@ struct ContentView: View {
             .font(.system(size: 12, weight: .semibold, design: .rounded))
             .foregroundStyle(palette.ink)
             .opacity(hintPulse ? 0.75 : 0.3)
+    }
+}
+
+/// Carries the toilet's ground line from the stage out to the room behind it.
+///
+/// The two used to be tuned to each other by hand, which held right up until the
+/// stage got wider for the roll and the plunger: everything scaled down, the toilet's
+/// feet rose, and it stood six inches off a floor that had not moved.
+struct FloorLineKey: PreferenceKey {
+    static let defaultValue: CGFloat? = nil
+    static func reduce(value: inout CGFloat?, nextValue: () -> CGFloat?) {
+        value = nextValue() ?? value
     }
 }
 
