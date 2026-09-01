@@ -71,6 +71,20 @@ final class FlushEngine: ObservableObject {
     /// Day-by-day record, for the leaderboard.
     @Published private(set) var standings: Standings
 
+    // MARK: - The tank
+
+    /// Flushes left before this tank runs dry.
+    @Published private(set) var flushesLeft: Int = Upkeep.runLength
+
+    /// What this tank has been worth so far.
+    @Published private(set) var runScore = 0
+
+    /// The best tank yet.
+    @Published private(set) var bestRun: Int
+
+    /// True once the tank is dry and the score is final.
+    @Published private(set) var isRunOver = false
+
     // MARK: - The daily
 
     /// Today's puzzle. Derived from the date, so it needs no network.
@@ -110,6 +124,7 @@ final class FlushEngine: ObservableObject {
         static let golden = "goldenFlushes"
         static let fixture = "equippedFixture"
         static let bestStreak = "bestStreak"
+        static let bestRun = "bestRun"
         static let grime = "grime"
     }
 
@@ -128,6 +143,7 @@ final class FlushEngine: ObservableObject {
         totalFlushes = total
         goldenFlushes = defaults.integer(forKey: Key.golden)
         bestStreak = defaults.integer(forKey: Key.bestStreak)
+        bestRun = defaults.integer(forKey: Key.bestRun)
         grime = min(max(defaults.double(forKey: Key.grime), 0), 1)
         standings = Standings.load(from: defaults)
         daily = DailyResult.load(from: defaults)
@@ -167,6 +183,12 @@ final class FlushEngine: ObservableObject {
     // MARK: - The button
 
     func pullHandle(_ pulled: FlushGrade = .good) {
+        // A dry tank is the end of the run, not a soft nudge.
+        guard isDailyRunning || flushesLeft > 0 else {
+            Haptics.shared.thud()
+            show(Message(text: "Tank's dry. Start a new one.", kind: .busy))
+            return
+        }
         guard !isDailyDone || fixtureBeforeDaily == nil else {
             Haptics.shared.thud()
             show(Message(text: "Today's daily is done. Come back tomorrow.", kind: .busy))
@@ -241,6 +263,11 @@ final class FlushEngine: ObservableObject {
         streak = 0
         bestStreak = 0
         defaults.set(0, forKey: Key.bestStreak)
+        bestRun = 0
+        defaults.set(0, forKey: Key.bestRun)
+        flushesLeft = Upkeep.runLength
+        runScore = 0
+        isRunOver = false
         isClogged = false
         plunges = 0
         paperPulled = 0
@@ -260,6 +287,39 @@ final class FlushEngine: ObservableObject {
         defaults.set(0, forKey: Key.total)
         defaults.set(0, forKey: Key.golden)
         show(Message(text: "A clean slate. Literally.", kind: .quip))
+    }
+
+    // MARK: - The tank
+
+    /// Draw a fresh tank and a clean bowl.
+    func startRun() {
+        flushesLeft = Upkeep.runLength
+        runScore = 0
+        isRunOver = false
+        streak = 0
+        setGrime(0)
+        paperPulled = 0
+        isPaperCut = false
+        isPaperTrailing = false
+        isClogged = false
+        plunges = 0
+        show(Message(text: "A full tank. \(Upkeep.runLength) flushes.", kind: .unlock))
+    }
+
+    /// Take one flush off the tank and bank what it was worth.
+    private func spendFromTank(blocked: Bool, load: Int) {
+        flushesLeft = max(flushesLeft - 1, 0)
+        if !blocked {
+            runScore += Int((Double(Upkeep.points(paper: load, golden: isGolden))
+                             * fixture.payout).rounded())
+        }
+        if flushesLeft == 0 {
+            isRunOver = true
+            if runScore > bestRun {
+                bestRun = runScore
+                defaults.set(bestRun, forKey: Key.bestRun)
+            }
+        }
     }
 
     // MARK: - The daily
@@ -332,6 +392,22 @@ final class FlushEngine: ObservableObject {
     /// more often.
     func useWand() {
         guard !isFlushing, grime > 0 else { return }
+        // Scrubbing spends water. During a daily the tank is not in play.
+        if !isDailyRunning {
+            guard flushesLeft >= Upkeep.wandCost else {
+                Haptics.shared.thud()
+                show(Message(text: "No water left to scrub with.", kind: .busy))
+                return
+            }
+            flushesLeft -= Upkeep.wandCost
+            if flushesLeft == 0 {
+                isRunOver = true
+                if runScore > bestRun {
+                    bestRun = runScore
+                    defaults.set(bestRun, forKey: Key.bestRun)
+                }
+            }
+        }
         let wasFilthy = grime >= Upkeep.grimyAbove
         withAnimation(.easeInOut(duration: 0.5)) { grime = 0 }
         defaults.set(0.0, forKey: Key.grime)
@@ -437,6 +513,7 @@ final class FlushEngine: ObservableObject {
         if isDailyRunning {
             recordDaily(blocked: blocked, load: load)
         } else {
+            spendFromTank(blocked: blocked, load: load)
             standings.record(golden: isGolden,
                              streak: streak,
                              points: runaway ? 0 : Upkeep.points(paper: load, golden: isGolden))

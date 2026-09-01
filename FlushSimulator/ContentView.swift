@@ -8,6 +8,7 @@ struct ContentView: View {
     @State private var isConfirmingReset = false
     @State private var isShowingBoard = false
     @State private var isShowingDaily = false
+    @State private var isShowingRunEnd = false
     @State private var hintPulse = false
 
     private var palette: Palette {
@@ -47,6 +48,18 @@ struct ContentView: View {
         .sheet(isPresented: $isShowingDaily) {
             DailyView(engine: engine, palette: palette)
         }
+        .onChange(of: engine.isRunOver) { _, over in
+            if over { isShowingRunEnd = true }
+        }
+        .sheet(isPresented: $isShowingRunEnd) {
+            RunSummaryView(score: engine.runScore,
+                           best: engine.bestRun,
+                           bestStreak: engine.bestStreak,
+                           palette: palette) {
+                engine.startRun()
+                isShowingRunEnd = false
+            }
+        }
         .sheet(isPresented: $isShowingBoard) {
             LeaderboardView(standings: engine.standings,
                             lifetime: engine.totalFlushes,
@@ -77,6 +90,9 @@ struct ContentView: View {
                 Text("FLUSH SIMULATOR")
                     .font(.system(size: 23, weight: .black, design: .rounded))
                     .kerning(1.2)
+                    // Three buttons sit beside this now; let it shrink rather than wrap.
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.72)
                 Text("2026 Deluxe Porcelain Edition")
                     .font(.system(size: 11, weight: .medium, design: .rounded))
                     .opacity(0.65)
@@ -151,9 +167,9 @@ struct ContentView: View {
 
         return VStack(spacing: 11) {
             HStack(spacing: 0) {
-                stat(title: "LIFETIME FLUSHES", value: engine.totalFlushes.formatted())
+                stat(title: "TANK", value: "\(engine.flushesLeft)")
                 Divider().frame(height: 32)
-                stat(title: "GOLDEN", value: engine.goldenFlushes.formatted())
+                stat(title: "RUN SCORE", value: engine.runScore.formatted())
                 Divider().frame(height: 32)
                 // Shows what you are on while a run is alive, and what you managed
                 // once it is over.
