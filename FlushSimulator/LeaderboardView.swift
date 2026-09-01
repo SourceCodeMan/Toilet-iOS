@@ -120,8 +120,11 @@ struct LeaderboardView: View {
         }
         .task(id: scope) {
             guard scope == .global else { return }
-            await global.refresh()
+            // Push first, then read. The other way round shows a board that does not
+            // yet contain the score just submitted, until you come back a second time.
+            await global.authenticate()
             await global.submit(lifetime: lifetime, bestDay: standings.bestDay?.score ?? 0)
+            await global.refresh()
         }
     }
 

@@ -352,6 +352,12 @@ final class FlushEngine: ObservableObject {
             isClogged = true
             wasRunaway = runaway
             isPaperTrailing = runaway
+            // An ordinary block still swallowed the sheet, so the roll starts over.
+            // Only a runaway is still attached, and that is what has to be cut free.
+            if !runaway {
+                paperPulled = 0
+                isPaperCut = false
+            }
             plunges = 0
             streak = 0
             Haptics.shared.thud()

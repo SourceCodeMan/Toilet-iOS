@@ -25,26 +25,44 @@ struct Plunger: View {
     /// Where it has been dragged to, relative to `home`. Owned by the stage.
     @Binding var offset: CGSize
 
+    /// The stage's coordinate space, which stays put while the plunger does not.
+    var space: String
+
     var onPump: () -> Void
 
     /// How close the rubber has to get to the bowl to count as seated.
-    private let seatRadius: CGFloat = 70
+    ///
+    /// Generous on purpose: the bowl is the only thing worth plunging, so there is
+    /// nothing to be precise about, and a tight radius reads as the plunger sitting
+    /// in the bowl while refusing to bite.
+    private let seatRadius: CGFloat = 105
     /// How far you have to push down for one stroke to register.
     private let strokeTravel: CGFloat = 22
 
     /// Where it settles when the finger lifts.
     @State private var parked: CGSize = .zero
-    /// Where the current downstroke began.
-    @State private var strokeAnchor: CGFloat?
 
-    /// The rubber itself, which is what has to be over the bowl — it hangs below the
-    /// middle of the shape, so seating is measured from here, not from the handle.
-    private var cup: CGPoint {
+    /// Where the current downstroke began.
+    ///
+    /// Held in a reference box rather than `@State` on purpose. A gesture writes this
+    /// and reads it back on the very next callback; SwiftUI value state does not
+    /// reliably round-trip that fast, so the anchor stayed nil and no stroke ever
+    /// completed. A plain object mutation is visible immediately.
+    @State private var stroke = Stroke()
+
+    /// The rubber for a given offset. It hangs below the middle of the shape, so
+    /// seating is measured from here rather than from the handle.
+    private func cup(for offset: CGSize) -> CGPoint {
         CGPoint(x: home.x + offset.width, y: home.y + offset.height + 46)
     }
-    private var isSeated: Bool {
-        hypot(cup.x - bowl.x, cup.y - bowl.y) < seatRadius
+    private func seated(at offset: CGSize) -> Bool {
+        let c = cup(for: offset)
+        return hypot(c.x - bowl.x, c.y - bowl.y) < seatRadius
     }
+    /// For drawing only. Never use this to decide a stroke mid-gesture: writing the
+    /// binding and reading it back in the same `onChanged` can still see the old
+    /// value, which reads as "not over the bowl" for the whole drag.
+    private var isSeated: Bool { seated(at: offset) }
 
     var body: some View {
         shape
@@ -88,34 +106,56 @@ struct Plunger: View {
     // MARK: - Haul it over, then push
 
     private var haul: some Gesture {
-        DragGesture(minimumDistance: 0)
+        // Measured in the stage's space, not the plunger's own. Its own space travels
+        // with it, which makes both the translation and the stroke read as nothing.
+        DragGesture(minimumDistance: 0, coordinateSpace: .named(space))
             .onChanged { value in
-                offset = CGSize(width: parked.width + value.translation.width,
-                                height: parked.height + value.translation.height)
+                let moved = CGSize(width: parked.width + value.translation.width,
+                                   height: parked.height + value.translation.height)
+                offset = moved
 
-                guard isClogged, !isBlockedByPaper, isSeated else {
-                    strokeAnchor = nil
+                // Seating latches. A downstroke pushes the cup well past the bowl's
+                // centre, so re-testing every frame unseats it mid-pump and the
+                // stroke never completes — and physically, shoving a seated plunger
+                // down is the whole point, not a reason for it to pop out.
+                if !stroke.seated, seated(at: moved) {
+                    stroke.seated = true
+                    stroke.restingOffset = moved
+                }
+                guard isClogged, !isBlockedByPaper, stroke.seated else {
+                    stroke.anchor = nil
                     return
                 }
                 let y = value.location.y
-                guard let anchor = strokeAnchor else { strokeAnchor = y; return }
+                guard let anchor = stroke.anchor else { stroke.anchor = y; return }
 
                 if y - anchor > strokeTravel {
                     onPump()                 // a completed downstroke
-                    strokeAnchor = y
+                    stroke.anchor = y
                 } else if anchor - y > strokeTravel {
-                    strokeAnchor = y         // came back up, ready for the next
+                    stroke.anchor = y        // came back up, ready for the next
                 }
             }
             .onEnded { _ in
-                // Stay where it was put if it is over the bowl; otherwise walk home.
-                parked = isSeated ? offset : .zero
+                // Sit where it first seated if it ever got there; otherwise walk home.
+                parked = stroke.seated ? stroke.restingOffset : .zero
                 withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
                     offset = parked
                 }
-                strokeAnchor = nil
+                stroke.anchor = nil
+                stroke.seated = false
             }
     }
+}
+
+/// A mutable box for the stroke anchor. See the note on `stroke` above.
+@MainActor private final class Stroke {
+    var anchor: CGFloat?
+    /// Set once the cup reaches the bowl, and held for the rest of the drag.
+    var seated = false
+    /// Where it first sat down, so releasing puts it back there rather than
+    /// wherever the last downstroke happened to end.
+    var restingOffset: CGSize = .zero
 }
 
 /// A bell-shaped rubber cup: wide flared lip, narrow neck.
