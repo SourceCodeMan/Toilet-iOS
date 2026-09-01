@@ -71,6 +71,11 @@ struct Plunger: View {
             .contentShape(Rectangle())
             .gesture(haul)
             .opacity(isClogged ? 1 : 0.7)
+            // Once the blockage is gone there is nothing to stand in the bowl for.
+            // Without this it stays parked on the seat for the rest of the session.
+            .onChange(of: isClogged) { _, blocked in
+                if !blocked { goHome() }
+            }
             .accessibilityElement()
             .accessibilityLabel("Plunger")
             .accessibilityValue(isClogged
@@ -137,14 +142,28 @@ struct Plunger: View {
                 }
             }
             .onEnded { _ in
-                // Sit where it first seated if it ever got there; otherwise walk home.
-                parked = stroke.seated ? stroke.restingOffset : .zero
-                withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
-                    offset = parked
+                // Only an actual blockage earns a place in the bowl, and only if it
+                // seated. Anything else goes back to the corner — otherwise a stray
+                // drag during ordinary play leaves it standing on the seat.
+                if isClogged, stroke.seated {
+                    parked = stroke.restingOffset
+                    withAnimation(.spring(response: 0.32, dampingFraction: 0.72)) {
+                        offset = parked
+                    }
+                } else {
+                    goHome()
                 }
                 stroke.anchor = nil
                 stroke.seated = false
             }
+    }
+
+    /// Back to the corner it leans in.
+    private func goHome() {
+        parked = .zero
+        withAnimation(.spring(response: 0.34, dampingFraction: 0.74)) {
+            offset = .zero
+        }
     }
 }
 
