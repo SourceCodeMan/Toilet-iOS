@@ -47,6 +47,9 @@ final class FlushEngine: ObservableObject {
     /// This sheet came off the roll as hundred dollar bills. One in a hundred.
     @Published private(set) var isCashRoll = false
 
+    /// True while the payout card is on screen.
+    @Published private(set) var isCashPayout = false
+
     /// Whether this sheet has had its chance yet, so the roll cannot be yo-yoed
     /// until it pays out.
     private var cashRolled = false
@@ -263,6 +266,7 @@ final class FlushEngine: ObservableObject {
         celebrationTask?.cancel()
         celebrationTask = nil
         celebrationStart = nil
+        isCashPayout = false
         FlushAudio.shared.stop()
 
         totalFlushes = 0
@@ -567,6 +571,7 @@ final class FlushEngine: ObservableObject {
         resetRoll()
 
         if wasCash {
+            isCashPayout = true
             celebrate()
             show(Message(text: Quips.cashLine(), kind: .golden))
             return
@@ -609,7 +614,10 @@ final class FlushEngine: ObservableObject {
     }
 
     private func endCelebration() {
-        withAnimation(.easeInOut(duration: 0.5)) { celebrationStart = nil }
+        withAnimation(.easeInOut(duration: 0.5)) {
+            celebrationStart = nil
+            isCashPayout = false
+        }
     }
 
     private func show(_ newMessage: Message) {

@@ -43,6 +43,11 @@ struct ContentView: View {
             if let start = engine.celebrationStart {
                 CelebrationView(start: start)
             }
+
+            if engine.isCashPayout {
+                CashPayoutView(palette: palette)
+                    .transition(.opacity)
+            }
         }
         .animation(.easeInOut(duration: 0.45), value: engine.showsGold)
         .sheet(isPresented: $isShowingDaily) {
