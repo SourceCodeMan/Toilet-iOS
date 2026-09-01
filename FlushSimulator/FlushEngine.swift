@@ -44,6 +44,13 @@ final class FlushEngine: ObservableObject {
     /// True once the sheet has been torn off and is sitting ready.
     @Published private(set) var isPaperCut = false
 
+    /// This sheet came off the roll as hundred dollar bills. One in a hundred.
+    @Published private(set) var isCashRoll = false
+
+    /// Whether this sheet has had its chance yet, so the roll cannot be yo-yoed
+    /// until it pays out.
+    private var cashRolled = false
+
     /// The sheet was never torn, so the flush dragged the roll in with it. Nothing
     /// clears until it is cut free.
     @Published private(set) var isPaperTrailing = false
@@ -270,8 +277,7 @@ final class FlushEngine: ObservableObject {
         isRunOver = false
         isClogged = false
         plunges = 0
-        paperPulled = 0
-        isPaperCut = false
+        resetRoll()
         isPaperTrailing = false
         wasRunaway = false
         standings = Standings()
@@ -307,11 +313,11 @@ final class FlushEngine: ObservableObject {
     }
 
     /// Take one flush off the tank and bank what it was worth.
-    private func spendFromTank(blocked: Bool, load: Int) {
+    private func spendFromTank(blocked: Bool, load: Int, cash: Bool) {
         flushesLeft = max(flushesLeft - 1, 0)
         if !blocked {
-            runScore += Int((Double(Upkeep.points(paper: load, golden: isGolden))
-                             * fixture.payout).rounded())
+            let base = Double(Upkeep.points(paper: load, golden: isGolden))
+            runScore += Int((base * fixture.payout * (cash ? Upkeep.cashMultiplier : 1)).rounded())
         }
         if flushesLeft == 0 {
             isRunOver = true
@@ -423,8 +429,28 @@ final class FlushEngine: ObservableObject {
         guard !isFlushing, !isClogged, !isPaperCut else { return }
         let wanted = min(max(squares, 0), Upkeep.paperRange.upperBound)
         guard wanted != paperPulled else { return }
+
+        // One roll in a hundred is not paper. Decided once, the first time this sheet
+        // is drawn, so pulling it back and forth cannot fish for it.
+        if !cashRolled, wanted > 0 {
+            cashRolled = true
+            if Int.random(in: 0..<Upkeep.cashOdds) == 0 {
+                isCashRoll = true
+                Haptics.shared.flush(golden: true, scale: 0.6)
+                show(Message(text: "Hold on. That's not paper.", kind: .golden))
+            }
+        }
+
         paperPulled = wanted
         Haptics.shared.tick()
+    }
+
+    /// Put a plain roll back on the wall.
+    private func resetRoll() {
+        paperPulled = 0
+        isPaperCut = false
+        isCashRoll = false
+        cashRolled = false
     }
 
     /// Tear it off. Until this happens the sheet is still attached to the roll.
@@ -496,7 +522,9 @@ final class FlushEngine: ObservableObject {
         }
 
         // A sheet still attached to the roll is not a quantity, it is an accident.
-        let runaway = paperPulled > 0 && !isPaperCut
+        // Money is the exception: it goes down however you feed it in, because a
+        // one-in-a-hundred payout that punishes you is not a payout.
+        let runaway = paperPulled > 0 && !isPaperCut && !isCashRoll
         let load = loadedPaper
 
         // Every flush leaves a little behind, and paper leaves more.
@@ -508,12 +536,12 @@ final class FlushEngine: ObservableObject {
                                      grime: grime,
                                      grade: grade,
                                      tolerance: fixture.tolerance)
-        let blocked = runaway || Double.random(in: 0..<1) < odds
+        let blocked = !isCashRoll && (runaway || Double.random(in: 0..<1) < odds)
 
         if isDailyRunning {
             recordDaily(blocked: blocked, load: load)
         } else {
-            spendFromTank(blocked: blocked, load: load)
+            spendFromTank(blocked: blocked, load: load, cash: isCashRoll)
             standings.record(golden: isGolden,
                              streak: streak,
                              points: runaway ? 0 : Upkeep.points(paper: load, golden: isGolden))
@@ -526,10 +554,7 @@ final class FlushEngine: ObservableObject {
             isPaperTrailing = runaway
             // An ordinary block still swallowed the sheet, so the roll starts over.
             // Only a runaway is still attached, and that is what has to be cut free.
-            if !runaway {
-                paperPulled = 0
-                isPaperCut = false
-            }
+            if !runaway { resetRoll() }
             plunges = 0
             streak = 0
             Haptics.shared.thud()
@@ -538,8 +563,14 @@ final class FlushEngine: ObservableObject {
         }
 
         // A tidy flush takes the sheet with it and leaves the roll ready again.
-        paperPulled = 0
-        isPaperCut = false
+        let wasCash = isCashRoll
+        resetRoll()
+
+        if wasCash {
+            celebrate()
+            show(Message(text: Quips.cashLine(), kind: .golden))
+            return
+        }
 
         // Earning a new toilet outranks anything else the app had to say. The gold
         // still happens on screen, it just does not get the line.

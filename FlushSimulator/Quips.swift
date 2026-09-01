@@ -50,6 +50,17 @@ enum Quips {
         "That's between you and the porcelain."
     ]
 
+    /// For the one roll in a hundred that is not paper.
+    private static let cash = [
+        "You just flushed rent.",
+        "Money down the drain. Literally.",
+        "The bowl has never been richer.",
+        "Somewhere, an accountant screamed.",
+        "That was a LOT of hundreds.",
+        "Benjamin would be proud.",
+        "Liquidity, achieved."
+    ]
+
     private static let golden = [
         "A GOLDEN FLUSH. Tell someone.",
         "GOLDEN FLUSH. The rarest swirl.",
@@ -65,6 +76,7 @@ enum Quips {
     @MainActor static func busyLine() -> String { pick(from: whileBusy) }
     @MainActor static func goldenLine() -> String { pick(from: golden) }
     @MainActor static func unwipedLine() -> String { pick(from: unwiped) }
+    @MainActor static func cashLine() -> String { pick(from: cash) }
 
     /// A line for round numbers, because round numbers deserve acknowledgement.
     static func milestone(for count: Int) -> String? {
