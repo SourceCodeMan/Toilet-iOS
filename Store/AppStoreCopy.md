@@ -115,8 +115,12 @@ third-party SDK of any kind in this app.
 
 ## Category
 
-- **Primary:** Games → Casual
-- **Secondary:** Games → Arcade
+- **Primary:** Games, subcategory **Casual**
+- **Second subcategory:** **Action**
+
+Apple has no "Arcade" subcategory under Games — the API rejects it. The full valid
+list is Action, Adventure, Board, Card, Casino, Casual, Family, Music, Puzzle,
+Racing, Role Playing, Simulation, Sports, Strategy, Trivia, Word.
 
 Both matter for the 4.3 question below: a "Casual game" is a category Apple expects
 short, simple loops in. "Entertainment" would invite the wrong comparison.
