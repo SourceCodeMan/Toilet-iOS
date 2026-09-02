@@ -1,0 +1,43 @@
+Thank you for the review. Answers to each point below.
+
+1. SCREEN RECORDING
+Attached is a screen recording captured on an iPhone 16 Pro Max running the latest iOS, beginning with launching the app from the Home Screen. It shows the typical user flow: a timed flush, drawing and tearing toilet paper, a deliberate blockage and the full recovery (cutting the paper free, plunging, cleaning), the Daily Flush, and the leaderboard.
+
+The app has no account registration, login, or account deletion, and no user-generated content, so none of those flows appear.
+
+2. PURPOSE AND TARGET AUDIENCE
+Flush Simulator is a single-player timing and risk arcade game for casual mobile players, rated 4+. The subject is deliberately comic, but the mechanic is a genuine skill test wrapped in a resource-management loop.
+
+The core action is a held gesture: the player presses and holds the flush lever and must release between 0.55 and 0.88 seconds for a "perfect" pull. Releasing earlier or later scores worse and breaks the streak. Around that sits a bounded run of twenty flushes ending in a score, where every square of paper used is worth more points but raises the chance of blocking the bowl.
+
+It provides a self-contained ninety-second challenge that can be scored and compared, which is the same value any pick-up arcade game offers.
+
+3. SETUP AND ACCESS
+No setup is required. There is no account, sign-in, credentials, onboarding, server, or configuration. The app is fully functional from first launch with no network connection.
+
+Everything is on one screen:
+- Flush handle: press and hold, release inside the window.
+- Toilet paper roll on the wall: drag down to draw squares, swipe across to tear one off. An untorn sheet is dragged in whole and always blocks the bowl.
+- Plunger on the floor: when blocked, drag it onto the bowl and push down repeatedly.
+- Wand: scrubs the bowl, and costs one flush from the tank.
+- Fixture bar: five toilets with different drain tolerance and score payout, unlocked by lifetime flushes.
+- Calendar icon: the Daily Flush. List icon: leaderboards.
+
+4. EXTERNAL SERVICES, TOOLS AND PLATFORMS
+Apple Game Center only. It backs two leaderboards and is contacted solely when the player opens the Global tab.
+
+There is nothing else: no third-party SDKs, no analytics, no advertising network, no crash reporter, no backend or API of our own, no authentication provider, no payment processor, no AI or machine learning service, and no data provider. There are no in-app purchases. The app makes no network request on its own initiative.
+
+All game state is stored on the device with UserDefaults, declared in the bundled privacy manifest under required-reason code CA92.1.
+
+All assets are original and generated rather than licensed. The toilet, room and water are drawn procedurally in SwiftUI at runtime. The flush audio is synthesised from oscillators and filtered noise using AVAudioEngine rather than being a recorded sample. The app icon is produced by a program included in the source repository.
+
+5. REGIONAL DIFFERENCES
+None. The app behaves identically in every region. There is no geo-restricted content and no region-dependent behaviour.
+
+The Daily Flush may appear server-driven, so to be clear: the day's toilet, starting grime and paper target are derived deterministically from the calendar date by a seeded generator inside the app. Every player worldwide gets the same setup for a given date, with no network call and no server involved.
+
+6. REGULATED INDUSTRY OR PROTECTED THIRD-PARTY MATERIAL
+Neither applies. This is a game with no regulated function: no health, finance, gambling, wagering, real-money mechanics, or professional services. The in-game "golden flush" and scoring are ordinary game mechanics with no monetary value and nothing to purchase.
+
+No protected third-party material is included. All code, artwork and audio are original and authored by me, as described in point 4.
